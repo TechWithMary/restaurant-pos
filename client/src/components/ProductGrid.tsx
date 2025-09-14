@@ -17,32 +17,27 @@ export default function ProductGrid({ products, onProductSelect }: ProductGridPr
   }
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-6 p-6">
       {products.map((product) => (
         <Card
           key={product.id}
-          className="hover-elevate cursor-pointer transition-all duration-200 min-h-[140px]"
+          className="hover-elevate cursor-pointer transition-all duration-300 min-h-[160px] rounded-xl shadow-lg hover:shadow-xl border-0 bg-gradient-to-br from-card to-card/80"
           onClick={() => onProductSelect(product)}
           data-testid={`card-product-${product.id}`}
         >
-          <CardContent className="p-4 flex flex-col h-full">
+          <CardContent className="p-6 flex flex-col h-full">
             <div className="flex-1">
-              <h3 className="font-semibold text-card-foreground line-clamp-2 mb-2">
+              <h3 className="font-semibold text-card-foreground line-clamp-2 mb-3 text-lg">
                 {product.name}
               </h3>
-              <p className="text-sm text-muted-foreground line-clamp-3 mb-3">
+              <p className="text-sm text-muted-foreground line-clamp-3 mb-4 leading-relaxed">
                 {product.description}
               </p>
             </div>
             <div className="mt-auto">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full bg-success/10 text-success hover:bg-success/20 font-bold"
-                data-testid={`button-add-${product.id}`}
-              >
+              <div className="w-full bg-gradient-to-r from-accent to-accent/90 text-accent-foreground rounded-lg py-3 px-4 font-bold text-lg text-center hover:from-accent/90 hover:to-accent transition-all duration-200">
                 €{parseFloat(product.price).toFixed(2)}
-              </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

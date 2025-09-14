@@ -147,7 +147,7 @@ export default function POSSystem() {
   return (
     <div className="h-screen flex bg-background overflow-hidden">
       {/* Left Column - Categories */}
-      <div className="w-64 bg-card border-r border-card-border flex-shrink-0">
+      <div className="w-72 bg-gradient-to-b from-card to-card/50 border-r border-card-border/50 flex-shrink-0 shadow-lg">
         <CategoryList
           categories={categories}
           selectedCategoryId={selectedCategoryId}
@@ -156,15 +156,15 @@ export default function POSSystem() {
       </div>
 
       {/* Center Column - Products */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-4 border-b border-border">
-          <h1 className="text-2xl font-bold text-foreground">
+      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-background to-background/80">
+        <div className="p-6 border-b border-border/50 bg-gradient-to-r from-card/30 to-transparent">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             Sistema POS - Restaurante
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-lg">
             {selectedCategoryId ? 
-              `${categories.find(c => c.id === selectedCategoryId)?.name || 'Categoría'} (${filteredProducts.length} productos)` :
-              'Selecciona una categoría'
+              `${categories.find(c => c.id === selectedCategoryId)?.name || 'Categoría'} • ${filteredProducts.length} productos disponibles` :
+              'Selecciona una categoría para comenzar'
             }
           </p>
         </div>
@@ -175,7 +175,7 @@ export default function POSSystem() {
       </div>
 
       {/* Right Column - Order Summary */}
-      <div className="w-80 bg-card border-l border-card-border flex-shrink-0">
+      <div className="w-96 bg-gradient-to-b from-card to-card/50 border-l border-card-border/50 flex-shrink-0 shadow-lg">
         <OrderSummary
           orderItems={orderItems}
           onUpdateQuantity={handleUpdateQuantity}

@@ -21,43 +21,43 @@ export default function OrderSummary({
   const total = subtotal + iva;
 
   return (
-    <div className="flex flex-col h-full p-4">
-      <Card className="flex-1 flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Resumen del Pedido</CardTitle>
+    <div className="flex flex-col h-full p-6">
+      <Card className="flex-1 flex flex-col rounded-xl shadow-lg border-0 bg-gradient-to-br from-card to-card/80">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl font-bold">Resumen del Pedido</CardTitle>
         </CardHeader>
         
-        <CardContent className="flex-1 flex flex-col gap-4">
+        <CardContent className="flex-1 flex flex-col gap-5">
           {orderItems.length === 0 ? (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
-              <p className="text-center">
+              <p className="text-center text-lg">
                 El pedido está vacío.<br />
-                Selecciona productos para empezar.
+                <span className="text-sm">Selecciona productos para empezar.</span>
               </p>
             </div>
           ) : (
             <>
-              <div className="flex-1 space-y-3 max-h-96 overflow-y-auto">
+              <div className="flex-1 space-y-4 max-h-96 overflow-y-auto pr-2">
                 {orderItems.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center gap-3 p-3 bg-muted/50 rounded-md"
+                    className="flex items-center gap-4 p-4 bg-muted/30 rounded-xl border border-muted-foreground/10 hover-elevate"
                     data-testid={`order-item-${item.id}`}
                   >
                     <div className="flex-1">
-                      <h4 className="font-medium text-sm line-clamp-1">
+                      <h4 className="font-semibold text-base line-clamp-1">
                         {item.product.name}
                       </h4>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         €{parseFloat(item.product.price).toFixed(2)} c/u
                       </p>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8"
+                        className="h-9 w-9 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-colors"
                         onClick={() => {
                           if (item.quantity > 1) {
                             onUpdateQuantity(item.id, item.quantity - 1);
@@ -70,14 +70,14 @@ export default function OrderSummary({
                         {item.quantity > 1 ? <Minus className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                       </Button>
                       
-                      <span className="w-8 text-center font-medium text-sm">
+                      <span className="w-10 text-center font-bold text-base bg-accent/10 text-accent rounded-lg py-1">
                         {item.quantity}
                       </span>
                       
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8"
+                        className="h-9 w-9 rounded-lg hover:bg-accent/10 hover:text-accent transition-colors"
                         onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                         data-testid={`button-increase-${item.id}`}
                       >
@@ -85,8 +85,8 @@ export default function OrderSummary({
                       </Button>
                     </div>
                     
-                    <div className="text-right min-w-[60px]">
-                      <span className="font-semibold text-sm">
+                    <div className="text-right min-w-[70px]">
+                      <span className="font-bold text-base text-accent">
                         €{item.subtotal.toFixed(2)}
                       </span>
                     </div>
@@ -94,18 +94,18 @@ export default function OrderSummary({
                 ))}
               </div>
               
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Subtotal:</span>
-                  <span data-testid="text-subtotal">€{subtotal.toFixed(2)}</span>
+              <div className="border-t border-muted-foreground/20 pt-5 space-y-3">
+                <div className="flex justify-between text-base">
+                  <span className="font-medium">Subtotal:</span>
+                  <span className="font-semibold" data-testid="text-subtotal">€{subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>IVA (21%):</span>
-                  <span data-testid="text-iva">€{iva.toFixed(2)}</span>
+                <div className="flex justify-between text-base">
+                  <span className="font-medium">IVA (21%):</span>
+                  <span className="font-semibold" data-testid="text-iva">€{iva.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
+                <div className="flex justify-between text-xl font-bold border-t border-muted-foreground/20 pt-3">
                   <span>Total:</span>
-                  <span data-testid="text-total">€{total.toFixed(2)}</span>
+                  <span className="text-accent" data-testid="text-total">€{total.toFixed(2)}</span>
                 </div>
               </div>
             </>
@@ -114,12 +114,12 @@ export default function OrderSummary({
       </Card>
       
       <Button
-        className="w-full h-14 text-lg font-semibold mt-4"
+        className="w-full h-16 text-xl font-bold mt-6 rounded-xl bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
         disabled={orderItems.length === 0}
         onClick={onSendToKitchen}
         data-testid="button-send-to-kitchen"
       >
-        Enviar a Cocina
+        🍽️ Enviar a Cocina
       </Button>
     </div>
   );
