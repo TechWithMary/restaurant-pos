@@ -1,6 +1,6 @@
 import type { Category, Product } from "@shared/schema";
 
-// Mock categories data in Spanish
+// Mock categories data in Spanish - used only for examples
 export const mockCategories: Category[] = [
   {
     id: "1",
@@ -19,7 +19,7 @@ export const mockCategories: Category[] = [
   },
 ];
 
-// Mock products data in Spanish
+// Mock products data in Spanish - used only for examples
 export const mockProducts: Product[] = [
   // Platos Principales
   {
@@ -88,16 +88,3 @@ export const mockProducts: Product[] = [
     categoryId: "3",
   },
 ];
-
-// TODO: Remove mock functionality - replace with real API calls
-export const getCategories = (): Promise<Category[]> => {
-  return Promise.resolve(mockCategories);
-};
-
-export const getProducts = (): Promise<Product[]> => {
-  return Promise.resolve(mockProducts);
-};
-
-export const getProductsByCategory = (categoryId: string): Promise<Product[]> => {
-  return Promise.resolve(mockProducts.filter(product => product.categoryId === categoryId));
-};

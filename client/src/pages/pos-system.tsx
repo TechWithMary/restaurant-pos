@@ -1,16 +1,96 @@
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import CategoryList from "@/components/CategoryList";
 import ProductGrid from "@/components/ProductGrid";
 import OrderSummary from "@/components/OrderSummary";
-import { mockCategories, mockProducts } from "@/lib/mockData";
 import type { Category, Product, OrderItemWithProduct } from "@shared/schema";
 
 export default function POSSystem() {
-  const [categories] = useState<Category[]>(mockCategories);
-  const [products] = useState<Product[]>(mockProducts);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [orderItems, setOrderItems] = useState<OrderItemWithProduct[]>([]);
+  const queryClient = useQueryClient();
+
+  // Fetch categories
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ['/api/categories'],
+  });
+
+  // Fetch products by category
+  const { data: filteredProducts = [] } = useQuery<Product[]>({
+    queryKey: ['/api/products', selectedCategoryId],
+    queryFn: async () => {
+      const response = await fetch(`/api/products?categoryId=${selectedCategoryId}`);
+      if (!response.ok) throw new Error('Failed to fetch products');
+      return response.json();
+    },
+    enabled: !!selectedCategoryId,
+  });
+
+  // Fetch current order items
+  const { data: orderItems = [] } = useQuery<OrderItemWithProduct[]>({
+    queryKey: ['/api/order-items'],
+  });
+
+  // Add item to order mutation
+  const addItemMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await fetch('/api/order-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, quantity: 1 })
+      });
+      if (!response.ok) throw new Error('Failed to add item');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+    },
+  });
+
+  // Update quantity mutation
+  const updateQuantityMutation = useMutation({
+    mutationFn: async ({ itemId, quantity }: { itemId: string; quantity: number }) => {
+      const response = await fetch(`/api/order-items/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity })
+      });
+      if (!response.ok) throw new Error('Failed to update quantity');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+    },
+  });
+
+  // Remove item mutation
+  const removeItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const response = await fetch(`/api/order-items/${itemId}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Failed to remove item');
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+    },
+  });
+
+  // Send to kitchen mutation
+  const sendToKitchenMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/orders/send-to-kitchen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!response.ok) throw new Error('Failed to send to kitchen');
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+    },
+  });
 
   // Set initial category selection
   useEffect(() => {
@@ -18,16 +98,6 @@ export default function POSSystem() {
       setSelectedCategoryId(categories[0].id);
     }
   }, [categories, selectedCategoryId]);
-
-  // Filter products by selected category
-  useEffect(() => {
-    if (selectedCategoryId) {
-      const filtered = products.filter(product => product.categoryId === selectedCategoryId);
-      setFilteredProducts(filtered);
-    } else {
-      setFilteredProducts([]);
-    }
-  }, [selectedCategoryId, products]);
 
   const handleCategorySelect = (categoryId: string) => {
     console.log(`Category selected: ${categoryId}`);
@@ -38,54 +108,40 @@ export default function POSSystem() {
     console.log(`Product added: ${product.name}`);
     
     // Check if product already exists in order
-    const existingItemIndex = orderItems.findIndex(item => item.productId === product.id);
+    const existingItem = orderItems.find(item => item.productId === product.id);
     
-    if (existingItemIndex > -1) {
+    if (existingItem) {
       // Update quantity if product exists
-      const updatedItems = [...orderItems];
-      updatedItems[existingItemIndex].quantity += 1;
-      updatedItems[existingItemIndex].subtotal = 
-        updatedItems[existingItemIndex].quantity * parseFloat(product.price);
-      setOrderItems(updatedItems);
+      updateQuantityMutation.mutate({ 
+        itemId: existingItem.id, 
+        quantity: existingItem.quantity + 1 
+      });
     } else {
       // Add new item to order
-      const newOrderItem: OrderItemWithProduct = {
-        id: `item-${Date.now()}-${Math.random()}`,
-        productId: product.id,
-        quantity: 1,
-        orderId: null,
-        product: product,
-        subtotal: parseFloat(product.price),
-      };
-      setOrderItems([...orderItems, newOrderItem]);
+      addItemMutation.mutate(product.id);
     }
   };
 
   const handleUpdateQuantity = (itemId: string, quantity: number) => {
     console.log(`Quantity updated for item ${itemId}: ${quantity}`);
-    const updatedItems = orderItems.map(item => {
-      if (item.id === itemId) {
-        return {
-          ...item,
-          quantity,
-          subtotal: quantity * parseFloat(item.product.price),
-        };
-      }
-      return item;
-    });
-    setOrderItems(updatedItems);
+    updateQuantityMutation.mutate({ itemId, quantity });
   };
 
   const handleRemoveItem = (itemId: string) => {
     console.log(`Item removed: ${itemId}`);
-    setOrderItems(orderItems.filter(item => item.id !== itemId));
+    removeItemMutation.mutate(itemId);
   };
 
   const handleSendToKitchen = () => {
     console.log("Order sent to kitchen:", orderItems);
-    // TODO: Remove mock functionality - implement real order submission
-    alert("¡Pedido enviado a cocina!");
-    setOrderItems([]);
+    sendToKitchenMutation.mutate(undefined, {
+      onSuccess: () => {
+        alert("¡Pedido enviado a cocina!");
+      },
+      onError: () => {
+        alert("Error al enviar el pedido. Intenta de nuevo.");
+      },
+    });
   };
 
   return (
