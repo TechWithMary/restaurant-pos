@@ -22,9 +22,9 @@ export default function OrderSummary({
 
   return (
     <div className="flex flex-col h-full p-6">
-      <Card className="flex-1 flex flex-col rounded-xl shadow-lg border-0 bg-gradient-to-br from-card to-card/80">
+      <Card className="flex-1 flex flex-col rounded-2xl shadow-xl border border-border/20 bg-gradient-to-br from-white/90 to-green-50/30 backdrop-blur-sm">
         <CardHeader className="pb-4">
-          <CardTitle className="text-xl font-bold">Resumen del Pedido</CardTitle>
+          <CardTitle className="text-xl font-bold text-foreground drop-shadow-sm">🛒 Resumen del Pedido</CardTitle>
         </CardHeader>
         
         <CardContent className="flex-1 flex flex-col gap-5">
@@ -114,7 +114,7 @@ export default function OrderSummary({
       </Card>
       
       <Button
-        className="w-full h-16 text-xl font-bold mt-6 rounded-xl bg-gradient-to-r from-accent to-accent/90 hover:from-accent/90 hover:to-accent text-accent-foreground shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+        className="w-full h-16 text-xl font-bold mt-6 rounded-2xl bg-gradient-to-r from-green-500 via-emerald-600 to-green-700 hover:from-green-600 hover:to-emerald-700 text-white shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:bg-muted"
         disabled={orderItems.length === 0}
         onClick={onSendToKitchen}
         data-testid="button-send-to-kitchen"

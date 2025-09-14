@@ -145,9 +145,9 @@ export default function POSSystem() {
   };
 
   return (
-    <div className="h-screen flex bg-background overflow-hidden">
+    <div className="h-screen flex bg-gradient-to-br from-background via-blue-50/30 to-purple-50/20 overflow-hidden">
       {/* Left Column - Categories */}
-      <div className="w-72 bg-gradient-to-b from-card to-card/50 border-r border-card-border/50 flex-shrink-0 shadow-lg">
+      <div className="w-72 bg-gradient-to-b from-white/95 to-blue-50/50 border-r border-border/30 flex-shrink-0 shadow-xl backdrop-blur-sm">
         <CategoryList
           categories={categories}
           selectedCategoryId={selectedCategoryId}
@@ -156,10 +156,10 @@ export default function POSSystem() {
       </div>
 
       {/* Center Column - Products */}
-      <div className="flex-1 overflow-y-auto bg-gradient-to-br from-background to-background/80">
-        <div className="p-6 border-b border-border/50 bg-gradient-to-r from-card/30 to-transparent">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Sistema POS - Restaurante
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6 border-b border-border/30 bg-gradient-to-r from-white/80 via-blue-50/30 to-purple-50/20 backdrop-blur-sm">
+          <h1 className="text-3xl font-bold text-foreground mb-2 drop-shadow-sm">
+            🍽️ Sistema POS - Restaurante
           </h1>
           <p className="text-muted-foreground text-lg">
             {selectedCategoryId ? 
@@ -175,7 +175,7 @@ export default function POSSystem() {
       </div>
 
       {/* Right Column - Order Summary */}
-      <div className="w-96 bg-gradient-to-b from-card to-card/50 border-l border-card-border/50 flex-shrink-0 shadow-lg">
+      <div className="w-96 bg-gradient-to-b from-white/95 to-green-50/50 border-l border-border/30 flex-shrink-0 shadow-xl backdrop-blur-sm">
         <OrderSummary
           orderItems={orderItems}
           onUpdateQuantity={handleUpdateQuantity}
