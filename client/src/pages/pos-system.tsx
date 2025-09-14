@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useSimpleToast } from "@/components/SimpleToast";
 import CategoryList from "@/components/CategoryList";
 import ProductGrid from "@/components/ProductGrid";
 import OrderSummary from "@/components/OrderSummary";
@@ -9,6 +11,8 @@ import type { Category, Product, OrderItemWithProduct } from "@shared/schema";
 export default function POSSystem() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { showToast } = useSimpleToast();
 
   // Fetch categories
   const { data: categories = [] } = useQuery<Category[]>({
@@ -84,8 +88,15 @@ export default function POSSystem() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
-      if (!response.ok) throw new Error('Failed to send to kitchen');
-      return response.json();
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        // If n8n returns an error, throw it to be handled in onError
+        throw new Error(data.error || 'Failed to send to kitchen');
+      }
+      
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
@@ -135,11 +146,65 @@ export default function POSSystem() {
   const handleSendToKitchen = () => {
     console.log("Order sent to kitchen:", orderItems);
     sendToKitchenMutation.mutate(undefined, {
-      onSuccess: () => {
-        alert("¡Pedido enviado a cocina!");
+      onSuccess: (data) => {
+        console.log("Send to kitchen success:", data);
+        // Show success notification (green)
+        if (data.success) {
+          console.log("Showing success toast:", data.message);
+          showToast({
+            title: "Éxito",
+            message: data.message || "¡Pedido enviado a cocina!",
+            type: "success",
+            duration: 5000,
+          });
+          // Also try shadcn toast as fallback
+          toast({
+            title: "Éxito",
+            description: data.message || "¡Pedido enviado a cocina!",
+            variant: "default",
+            duration: 5000,
+          });
+        } else {
+          console.log("Showing error toast (from success):", data.error);
+          showToast({
+            title: "Error",
+            message: data.error || "Error al enviar el pedido",
+            type: "error",
+            duration: 5000,
+          });
+          toast({
+            title: "Error",
+            description: data.error || "Error al enviar el pedido",
+            variant: "destructive",
+            duration: 5000,
+          });
+        }
       },
-      onError: () => {
-        alert("Error al enviar el pedido. Intenta de nuevo.");
+      onError: (error: any) => {
+        console.error("Error sending to kitchen:", error);
+        // Show error notification (red) 
+        let errorMessage = "Error al enviar el pedido. Intenta de nuevo.";
+        
+        if (error?.message) {
+          errorMessage = error.message;
+        } else if (typeof error === 'string') {
+          errorMessage = error;
+        }
+        
+        console.log("Showing error toast (from onError):", errorMessage);
+        showToast({
+          title: "Error",
+          message: errorMessage,
+          type: "error",
+          duration: 8000,
+        });
+        // Also try shadcn toast as fallback
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+          duration: 8000,
+        });
       },
     });
   };

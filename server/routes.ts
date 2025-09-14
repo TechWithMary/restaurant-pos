@@ -165,28 +165,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send order to kitchen
+  // Send order to kitchen via n8n webhook
   app.post("/api/orders/send-to-kitchen", async (req, res) => {
     try {
       const orderItems = await storage.getOrderItems();
       
       if (orderItems.length === 0) {
-        return res.status(400).json({ error: "No items in current order" });
+        return res.status(400).json({ success: false, error: "No items in current order" });
       }
+
+      // Prepare data in the format expected by n8n
+      const orderData = {
+        mesa_id: 7, // Fixed value as requested
+        mesero_id: 1, // Fixed value as requested
+        productos: orderItems.map(item => {
+          const producto_id = parseInt(item.productId);
+          // Validate that producto_id is a valid number
+          if (!Number.isFinite(producto_id)) {
+            throw new Error(`Invalid product ID: ${item.productId}`);
+          }
+          return {
+            producto_id,
+            cantidad: item.quantity
+          };
+        })
+      };
+
+      // Send to n8n webhook
+      const n8nUrl = process.env.N8N_NUEVO_PEDIDO_URL;
+      if (!n8nUrl) {
+        return res.status(500).json({ success: false, error: "N8N webhook URL not configured" });
+      }
+
+      console.log("Sending order to n8n:", orderData);
       
-      // In a real system, this would create an order record and notify kitchen
-      console.log("Order sent to kitchen:", orderItems);
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Clear current order items
+      const response = await fetch(n8nUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorMessage = 'Error al procesar el pedido';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            const text = await response.text();
+            errorMessage = text || `Error ${response.status}: ${response.statusText}`;
+          }
+        } catch {
+          errorMessage = `Error ${response.status}: ${response.statusText}`;
+        }
+        console.error("n8n error response:", errorMessage);
+        return res.status(response.status).json({ success: false, error: errorMessage });
+      }
+
+      // If successful, clear the order and return success
       await storage.clearAllOrderItems();
       
+      let responseData = null;
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          responseData = await response.json();
+        } else {
+          responseData = await response.text();
+        }
+      } catch {
+        // If we can't parse the response, that's OK for success case
+        responseData = { status: 'sent' };
+      }
+      
+      console.log("Order successfully sent to n8n:", responseData);
       res.json({ 
-        message: "Order sent to kitchen successfully",
-        itemCount: orderItems.length 
+        success: true, 
+        message: '¡Pedido enviado a cocina!',
+        data: responseData
       });
     } catch (error) {
-      console.error("Error sending order to kitchen:", error);
-      res.status(500).json({ error: "Failed to send order to kitchen" });
+      console.error('Error sending order to n8n:', error);
+      
+      let errorMessage = 'Error interno del servidor';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Timeout al conectar con la cocina. Intenta de nuevo.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      res.status(500).json({ 
+        success: false, 
+        error: errorMessage
+      });
     }
   });
 
