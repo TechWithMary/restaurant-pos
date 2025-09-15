@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +8,7 @@ import { Delete, LogIn } from "lucide-react";
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const { login } = useAuth();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
 
@@ -30,9 +32,23 @@ export default function Login() {
 
     switch (pin) {
       case "1111":
-        setLocation("/mesas");
+        // Mesero ID 1 - Juan
+        login(1, "mesero");
+        setLocation("/tables");
+        break;
+      case "2222":
+        // Mesero ID 2 - María
+        login(2, "mesero");
+        setLocation("/tables");
+        break;
+      case "3333":
+        // Mesero ID 3 - Carlos
+        login(3, "mesero");
+        setLocation("/tables");
         break;
       case "9999":
+        // Admin
+        login(999, "admin");
         setLocation("/admin");
         break;
       default:

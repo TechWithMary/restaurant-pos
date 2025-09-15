@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCategorySchema, insertProductSchema, insertOrderItemSchema } from "@shared/schema";
+import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, sendToKitchenSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Categories API
@@ -68,10 +68,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Order Items API
+  // Order Items API - Mesa-scoped
   app.get("/api/order-items", async (req, res) => {
     try {
-      const orderItems = await storage.getOrderItems();
+      const { mesa_id } = req.query;
+      
+      if (!mesa_id || typeof mesa_id !== 'string') {
+        return res.status(400).json({ error: "mesa_id query parameter is required" });
+      }
+      
+      const mesaId = parseInt(mesa_id);
+      if (isNaN(mesaId) || mesaId <= 0) {
+        return res.status(400).json({ error: "mesa_id must be a positive integer" });
+      }
+      
+      const orderItems = await storage.getOrderItems(mesaId);
       
       // Enhance order items with product details
       const orderItemsWithProducts = await Promise.all(
@@ -122,15 +133,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/order-items/:id", async (req, res) => {
     try {
-      const { quantity } = req.body;
+      const { quantity, mesa_id } = req.body;
       
       if (!quantity || typeof quantity !== 'number' || quantity < 1) {
         return res.status(400).json({ error: "Invalid quantity" });
       }
       
-      const orderItem = await storage.updateOrderItemQuantity(req.params.id, quantity);
+      if (!mesa_id || typeof mesa_id !== 'number' || mesa_id <= 0) {
+        return res.status(400).json({ error: "mesa_id is required and must be a positive integer" });
+      }
+      
+      const orderItem = await storage.updateOrderItemQuantity(req.params.id, quantity, mesa_id);
       if (!orderItem) {
-        return res.status(404).json({ error: "Order item not found" });
+        return res.status(404).json({ error: "Order item not found or does not belong to this mesa" });
       }
       
       // Return enhanced order item with product details
@@ -154,9 +169,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/order-items/:id", async (req, res) => {
     try {
-      const success = await storage.deleteOrderItem(req.params.id);
+      const { mesa_id } = req.query;
+      
+      if (!mesa_id || typeof mesa_id !== 'string') {
+        return res.status(400).json({ error: "mesa_id query parameter is required" });
+      }
+      
+      const mesaId = parseInt(mesa_id);
+      if (isNaN(mesaId) || mesaId <= 0) {
+        return res.status(400).json({ error: "mesa_id must be a positive integer" });
+      }
+      
+      const success = await storage.deleteOrderItem(req.params.id, mesaId);
       if (!success) {
-        return res.status(404).json({ error: "Order item not found" });
+        return res.status(404).json({ error: "Order item not found or does not belong to this mesa" });
       }
       res.status(204).send();
     } catch (error) {
@@ -168,7 +194,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send order to kitchen via n8n webhook
   app.post("/api/orders/send-to-kitchen", async (req, res) => {
     try {
-      const orderItems = await storage.getOrderItems();
+      // Validate request body with Zod schema
+      const validatedData = sendToKitchenSchema.parse(req.body);
+      const { mesa_id, mesero_id, numberOfPeople } = validatedData;
+      
+      const orderItems = await storage.getOrderItems(mesa_id);
       
       if (orderItems.length === 0) {
         return res.status(400).json({ success: false, error: "No items in current order" });
@@ -176,8 +206,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Prepare data in the format expected by n8n
       const orderData = {
-        mesa_id: 7, // Fixed value as requested
-        mesero_id: 1, // Fixed value as requested
+        mesa_id: mesa_id, // Already validated as number by Zod
+        mesero_id: mesero_id, // Already validated as number by Zod
+        numero_personas: numberOfPeople || null, // Optional field
         productos: orderItems.map(item => {
           const producto_id = parseInt(item.productId);
           // Validate that producto_id is a valid number
@@ -233,7 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // If successful, clear the order and return success
-      await storage.clearAllOrderItems();
+      await storage.clearOrderItems(mesa_id);
       
       let responseData = null;
       try {

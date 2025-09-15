@@ -157,9 +157,9 @@ export class N8nStorage implements IStorage {
     throw new Error("Creating products via n8n not implemented");
   }
 
-  // Order Items (local storage only)
-  async getOrderItems(): Promise<OrderItem[]> {
-    return Array.from(this.orderItems.values());
+  // Order Items (local storage only) - Mesa-scoped
+  async getOrderItems(mesaId: number): Promise<OrderItem[]> {
+    return Array.from(this.orderItems.values()).filter(item => item.mesaId === mesaId);
   }
 
   async createOrderItem(orderItem: InsertOrderItem): Promise<OrderItem> {
@@ -168,26 +168,35 @@ export class N8nStorage implements IStorage {
       ...orderItem, 
       id,
       quantity: orderItem.quantity ?? 1,
-      orderId: orderItem.orderId ?? null
+      orderId: orderItem.orderId ?? null,
+      mesaId: orderItem.mesaId
     };
     this.orderItems.set(id, newOrderItem);
     return newOrderItem;
   }
 
-  async updateOrderItemQuantity(id: string, quantity: number): Promise<OrderItem | undefined> {
+  async updateOrderItemQuantity(id: string, quantity: number, mesaId: number): Promise<OrderItem | undefined> {
     const orderItem = this.orderItems.get(id);
-    if (orderItem) {
+    if (orderItem && orderItem.mesaId === mesaId) {
       orderItem.quantity = quantity;
       this.orderItems.set(id, orderItem);
     }
     return orderItem;
   }
 
-  async deleteOrderItem(id: string): Promise<boolean> {
-    return this.orderItems.delete(id);
+  async deleteOrderItem(id: string, mesaId: number): Promise<boolean> {
+    const orderItem = this.orderItems.get(id);
+    if (orderItem && orderItem.mesaId === mesaId) {
+      return this.orderItems.delete(id);
+    }
+    return false;
   }
 
-  async clearAllOrderItems(): Promise<void> {
-    this.orderItems.clear();
+  async clearOrderItems(mesaId: number): Promise<void> {
+    const itemsToDelete = Array.from(this.orderItems.entries())
+      .filter(([, item]) => item.mesaId === mesaId)
+      .map(([id]) => id);
+    
+    itemsToDelete.forEach(id => this.orderItems.delete(id));
   }
 }

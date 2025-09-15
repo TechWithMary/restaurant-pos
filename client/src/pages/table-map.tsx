@@ -1,18 +1,45 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ArrowLeft, Users } from "lucide-react";
 
 export default function TableMap() {
   const [, setLocation] = useLocation();
+  const { auth, selectTable, logout } = useAuth();
+  const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [numberOfPeople, setNumberOfPeople] = useState<string>("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Authentication guard - redirect if not authenticated
+  if (!auth.isAuthenticated) {
+    setLocation("/login");
+    return null;
+  }
 
   const handleBackToLogin = () => {
-    setLocation("/");
+    logout();
+    setLocation("/login");
   };
 
-  const handleTableSelect = (tableNumber: number) => {
-    // Navegar al POS con la mesa seleccionada
-    setLocation("/pos");
+  const handleTableClick = (tableNumber: number, status: string) => {
+    if (status === "available") {
+      setSelectedTable(tableNumber);
+      setNumberOfPeople("");
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleConfirmTable = () => {
+    if (selectedTable && numberOfPeople && parseInt(numberOfPeople) > 0) {
+      selectTable(selectedTable, parseInt(numberOfPeople));
+      setLocation(`/order/${selectedTable}`);
+      setIsModalOpen(false);
+    }
   };
 
   // Simulación de mesas del restaurante
@@ -66,9 +93,12 @@ export default function TableMap() {
               data-testid="button-back-login"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver al Login
+              Cerrar Sesión
             </Button>
             <h1 className="text-3xl font-bold text-primary">Mapa de Mesas</h1>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-muted-foreground">Mesero ID: {auth.mesero_id}</p>
           </div>
         </div>
 
@@ -100,8 +130,10 @@ export default function TableMap() {
           {tables.map((table) => (
             <Card 
               key={table.id}
-              className="hover-elevate active-elevate-2 cursor-pointer transition-all"
-              onClick={() => handleTableSelect(table.number)}
+              className={`hover-elevate active-elevate-2 transition-all ${
+                table.status === "available" ? "cursor-pointer" : "cursor-not-allowed opacity-75"
+              }`}
+              onClick={() => handleTableClick(table.number, table.status)}
               data-testid={`table-${table.number}`}
             >
               <CardContent className="p-6 text-center">
@@ -122,17 +154,57 @@ export default function TableMap() {
         {/* Quick Actions */}
         <div className="mt-8 text-center">
           <p className="text-muted-foreground mb-4">
-            Selecciona una mesa para comenzar a tomar un pedido
+            Selecciona una mesa disponible (verde) para comenzar a tomar un pedido
           </p>
-          <Button 
-            size="lg"
-            onClick={() => setLocation("/pos")}
-            className="hover-elevate active-elevate-2"
-            data-testid="button-direct-pos"
-          >
-            Ir Directamente al POS
-          </Button>
         </div>
+
+        {/* Modal para número de personas */}
+        <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <DialogContent className="sm:max-w-[425px]" data-testid="people-count-modal">
+            <DialogHeader>
+              <DialogTitle>Mesa {selectedTable}</DialogTitle>
+              <DialogDescription>
+                ¿Cuántas personas van a ocupar esta mesa?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="people-count" className="text-right">
+                  Personas:
+                </Label>
+                <Input
+                  id="people-count"
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={numberOfPeople}
+                  onChange={(e) => setNumberOfPeople(e.target.value)}
+                  className="col-span-3"
+                  placeholder="Ej: 4"
+                  data-testid="input-people-count"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 hover-elevate active-elevate-2"
+                onClick={() => setIsModalOpen(false)}
+                data-testid="button-cancel-table"
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 hover-elevate active-elevate-2"
+                onClick={handleConfirmTable}
+                disabled={!numberOfPeople || parseInt(numberOfPeople) <= 0}
+                data-testid="button-confirm-table"
+              >
+                Confirmar Mesa
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

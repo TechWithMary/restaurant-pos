@@ -1,18 +1,35 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation, useParams } from "wouter";
+import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useSimpleToast } from "@/components/SimpleToast";
 import CategoryList from "@/components/CategoryList";
 import ProductGrid from "@/components/ProductGrid";
 import OrderSummary from "@/components/OrderSummary";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import type { Category, Product, OrderItemWithProduct } from "@shared/schema";
 
 export default function POSSystem() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+  const params = useParams();
+  const [, setLocation] = useLocation();
+  const { auth, clearTable } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { showToast } = useSimpleToast();
+  
+  const tableId = params.tableId ? parseInt(params.tableId) : null;
+  
+  // Redirect if no table selected or not authenticated
+  useEffect(() => {
+    if (!auth.isAuthenticated || !tableId) {
+      setLocation('/login');
+      return;
+    }
+  }, [auth.isAuthenticated, tableId, setLocation]);
 
   // Fetch categories
   const { data: categories = [] } = useQuery<Category[]>({
@@ -30,63 +47,82 @@ export default function POSSystem() {
     enabled: !!selectedCategoryId,
   });
 
-  // Fetch current order items
+  // Fetch current order items - mesa-scoped
   const { data: orderItems = [] } = useQuery<OrderItemWithProduct[]>({
-    queryKey: ['/api/order-items'],
+    queryKey: ['/api/order-items', tableId],
+    queryFn: async () => {
+      if (!tableId) throw new Error('Table ID is required');
+      const response = await fetch(`/api/order-items?mesa_id=${tableId}`);
+      if (!response.ok) throw new Error('Failed to fetch order items');
+      return response.json();
+    },
+    enabled: !!tableId,
   });
 
   // Add item to order mutation
   const addItemMutation = useMutation({
     mutationFn: async (productId: string) => {
+      if (!tableId) throw new Error('Table ID is required');
       const response = await fetch('/api/order-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, quantity: 1 })
+        body: JSON.stringify({ productId, quantity: 1, mesaId: tableId })
       });
       if (!response.ok) throw new Error('Failed to add item');
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
     },
   });
 
   // Update quantity mutation
   const updateQuantityMutation = useMutation({
     mutationFn: async ({ itemId, quantity }: { itemId: string; quantity: number }) => {
+      if (!tableId) throw new Error('Table ID is required');
       const response = await fetch(`/api/order-items/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity })
+        body: JSON.stringify({ quantity, mesa_id: tableId })
       });
       if (!response.ok) throw new Error('Failed to update quantity');
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
     },
   });
 
   // Remove item mutation
   const removeItemMutation = useMutation({
     mutationFn: async (itemId: string) => {
-      const response = await fetch(`/api/order-items/${itemId}`, {
+      if (!tableId) throw new Error('Table ID is required');
+      const response = await fetch(`/api/order-items/${itemId}?mesa_id=${tableId}`, {
         method: 'DELETE'
       });
       if (!response.ok) throw new Error('Failed to remove item');
       return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
     },
   });
 
   // Send to kitchen mutation
   const sendToKitchenMutation = useMutation({
     mutationFn: async () => {
+      if (!tableId || !auth.mesero_id) {
+        throw new Error('Faltan datos de mesa o mesero');
+      }
+      
       const response = await fetch('/api/orders/send-to-kitchen', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mesa_id: tableId,
+          mesero_id: auth.mesero_id,
+          numberOfPeople: auth.numberOfPeople
+        })
       });
       
       const data = await response.json();
@@ -99,7 +135,7 @@ export default function POSSystem() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
     },
   });
 
@@ -213,6 +249,27 @@ export default function POSSystem() {
     <div className="h-screen flex bg-gradient-to-br from-background via-blue-50/30 to-purple-50/20 overflow-hidden">
       {/* Left Column - Categories */}
       <div className="w-72 bg-gradient-to-b from-white/95 to-blue-50/50 border-r border-border/30 flex-shrink-0 shadow-xl backdrop-blur-sm">
+        {/* Header with back button */}
+        <div className="p-4 border-b border-border/30 bg-gradient-to-r from-white/90 to-blue-50/30">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              clearTable();
+              setLocation('/tables');
+            }}
+            className="mb-2 hover-elevate active-elevate-2"
+            data-testid="button-back-tables"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Volver a Mesas
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            <p>Mesa: {tableId}</p>
+            <p>Mesero: {auth.mesero_id}</p>
+            {auth.numberOfPeople && <p>Personas: {auth.numberOfPeople}</p>}
+          </div>
+        </div>
         <CategoryList
           categories={categories}
           selectedCategoryId={selectedCategoryId}
@@ -224,7 +281,7 @@ export default function POSSystem() {
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 border-b border-border/30 bg-gradient-to-r from-white/80 via-blue-50/30 to-purple-50/20 backdrop-blur-sm">
           <h1 className="text-3xl font-bold text-foreground mb-2 drop-shadow-sm">
-            🍽️ Sistema POS - Restaurante
+            🍽️ Mesa {tableId} - Pedido
           </h1>
           <p className="text-muted-foreground text-lg">
             {selectedCategoryId ? 

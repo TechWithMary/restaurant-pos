@@ -25,6 +25,7 @@ export const orderItems = pgTable("order_items", {
   productId: varchar("product_id").notNull(),
   quantity: integer("quantity").notNull().default(1),
   orderId: varchar("order_id"),
+  mesaId: integer("mesa_id").notNull(),
 });
 
 // Create insert schemas
@@ -50,3 +51,10 @@ export type OrderItemWithProduct = OrderItem & {
   product: Product;
   subtotal: number;
 };
+
+// Send to kitchen validation schema
+export const sendToKitchenSchema = z.object({
+  mesa_id: z.number().int().positive(),
+  mesero_id: z.number().int().positive(),
+  numberOfPeople: z.number().int().positive().optional(),
+});

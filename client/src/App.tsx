@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SimpleToastProvider } from "@/components/SimpleToast";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Login from "@/pages/login";
 import TableMap from "@/pages/table-map";
 import Admin from "@/pages/admin";
@@ -14,9 +15,10 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Login} />
-      <Route path="/mesas" component={TableMap} />
+      <Route path="/login" component={Login} />
+      <Route path="/tables" component={TableMap} />
       <Route path="/admin" component={Admin} />
-      <Route path="/pos" component={POSSystem} />
+      <Route path="/order/:tableId" component={POSSystem} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
@@ -27,12 +29,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SimpleToastProvider>
-          <div style={{ position: 'relative', zIndex: 9999 }}>
-            <Toaster />
-          </div>
-          <Router />
-        </SimpleToastProvider>
+        <AuthProvider>
+          <SimpleToastProvider>
+            <div style={{ position: 'relative', zIndex: 9999 }}>
+              <Toaster />
+            </div>
+            <Router />
+          </SimpleToastProvider>
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
