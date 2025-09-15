@@ -80,11 +80,11 @@ export default function Login() {
       <div className="grid grid-cols-3 gap-4 max-w-xs mx-auto">
         {numbers.flat().map((num, index) => {
           if (num === "") {
-            return <div key={index} className="h-16"></div>;
+            return <div key={`keypad-empty-${index}`} className="h-16"></div>;
           }
           return (
             <Button
-              key={num}
+              key={`keypad-${num}-${index}`}
               variant="outline"
               size="lg"
               className="h-16 text-2xl font-bold hover-elevate active-elevate-2"
