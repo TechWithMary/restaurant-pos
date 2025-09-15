@@ -130,6 +130,6 @@ export class MemStorage implements IStorage {
   }
 }
 
-import { DbStorage } from "./db-storage";
+import { N8nStorage } from "./n8n-storage";
 
-export const storage = new DbStorage();
+export const storage = new N8nStorage();
