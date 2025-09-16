@@ -47,81 +47,77 @@ export default function POSSystem() {
     enabled: !!selectedCategoryId,
   });
 
-  // Fetch current order items - mesa-scoped
+  // Fetch current order items - mesa-scoped (usando mesa fija temporal)
+  const TEMP_MESA_ID = 7;
   const { data: orderItems = [] } = useQuery<OrderItemWithProduct[]>({
-    queryKey: ['/api/order-items', tableId],
+    queryKey: ['/api/order-items', TEMP_MESA_ID],
     queryFn: async () => {
-      if (!tableId) throw new Error('Table ID is required');
-      const response = await fetch(`/api/order-items?mesa_id=${tableId}`);
+      const response = await fetch(`/api/order-items?mesa_id=${TEMP_MESA_ID}`);
       if (!response.ok) throw new Error('Failed to fetch order items');
       return response.json();
     },
-    enabled: !!tableId,
   });
 
   // Add item to order mutation
   const addItemMutation = useMutation({
     mutationFn: async (productId: string) => {
-      if (!tableId) throw new Error('Table ID is required');
       const response = await fetch('/api/order-items', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId, quantity: 1, mesaId: tableId })
+        body: JSON.stringify({ productId, quantity: 1, mesaId: TEMP_MESA_ID })
       });
       if (!response.ok) throw new Error('Failed to add item');
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', TEMP_MESA_ID] });
     },
   });
 
   // Update quantity mutation
   const updateQuantityMutation = useMutation({
     mutationFn: async ({ itemId, quantity }: { itemId: string; quantity: number }) => {
-      if (!tableId) throw new Error('Table ID is required');
       const response = await fetch(`/api/order-items/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantity, mesa_id: tableId })
+        body: JSON.stringify({ quantity, mesa_id: TEMP_MESA_ID })
       });
       if (!response.ok) throw new Error('Failed to update quantity');
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', TEMP_MESA_ID] });
     },
   });
 
   // Remove item mutation
   const removeItemMutation = useMutation({
     mutationFn: async (itemId: string) => {
-      if (!tableId) throw new Error('Table ID is required');
-      const response = await fetch(`/api/order-items/${itemId}?mesa_id=${tableId}`, {
+      const response = await fetch(`/api/order-items/${itemId}?mesa_id=${TEMP_MESA_ID}`, {
         method: 'DELETE'
       });
       if (!response.ok) throw new Error('Failed to remove item');
       return response;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', TEMP_MESA_ID] });
     },
   });
 
   // Send to kitchen mutation
   const sendToKitchenMutation = useMutation({
     mutationFn: async () => {
-      if (!tableId || !auth.mesero_id) {
-        throw new Error('Faltan datos de mesa o mesero');
-      }
+      // Valores temporales hardcodeados hasta implementar login y selección de mesas
+      const TEMP_MESA_ID = 7;
+      const TEMP_MESERO_ID = 1;
       
       const response = await fetch('/api/orders/send-to-kitchen', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mesa_id: tableId,
-          mesero_id: auth.mesero_id,
-          numberOfPeople: auth.numberOfPeople
+          mesa_id: TEMP_MESA_ID,
+          mesero_id: TEMP_MESERO_ID,
+          // numberOfPeople omitido por ahora (opcional en el schema)
         })
       });
       
@@ -135,7 +131,7 @@ export default function POSSystem() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', 7] }); // Usar mesa fija temporal
     },
   });
 
