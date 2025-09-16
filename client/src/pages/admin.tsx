@@ -1,10 +1,30 @@
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Settings, BarChart3, Users, Menu } from "lucide-react";
+import { ArrowLeft, Settings, BarChart3, Users, Menu, DollarSign, UserCheck, TableIcon } from "lucide-react";
+import { formatColombianPrice } from "@/lib/utils";
+
+// Tipos para los datos de KPIs
+interface AdminKPIs {
+  ventas_hoy: number;
+  personal_activo: number;
+  mesas_ocupadas: number;
+  mesas_totales: number;
+}
 
 export default function Admin() {
   const [, setLocation] = useLocation();
+
+  // Fetch KPIs data from n8n
+  const { data: kpisData, isLoading: kpisLoading } = useQuery<AdminKPIs>({
+    queryKey: ['/api/admin/kpis'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/kpis');
+      if (!response.ok) throw new Error('Failed to fetch KPIs');
+      return response.json();
+    },
+  });
 
   const handleBackToLogin = () => {
     setLocation("/");
@@ -15,25 +35,50 @@ export default function Admin() {
       title: "Gestión de Menú",
       description: "Administrar categorías y productos",
       icon: Menu,
-      action: () => console.log("Menú management"),
+      route: "/admin/menu",
     },
     {
       title: "Reportes y Ventas",
       description: "Ver estadísticas y reportes de ventas",
       icon: BarChart3,
-      action: () => console.log("Sales reports"),
+      route: "/admin/ventas",
     },
     {
       title: "Gestión de Personal",
       description: "Administrar usuarios y permisos",
       icon: Users,
-      action: () => console.log("Staff management"),
+      route: "/admin/empleados",
     },
     {
       title: "Configuración",
       description: "Configurar sistema y integraciones",
       icon: Settings,
-      action: () => console.log("Settings"),
+      route: "/admin/configuracion",
+    },
+  ];
+
+  // KPIs data with loading states
+  const kpiCards = [
+    {
+      title: "Ventas Hoy",
+      value: kpisLoading ? "Cargando..." : formatColombianPrice(kpisData?.ventas_hoy || 0),
+      icon: DollarSign,
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+    },
+    {
+      title: "Personal Activo",
+      value: kpisLoading ? "Cargando..." : `${kpisData?.personal_activo || 0} meseros`,
+      icon: UserCheck,
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+    },
+    {
+      title: "Mesas Ocupadas",
+      value: kpisLoading ? "Cargando..." : `${kpisData?.mesas_ocupadas || 0}/${kpisData?.mesas_totales || 0}`,
+      icon: TableIcon,
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
     },
   ];
 
@@ -56,10 +101,29 @@ export default function Admin() {
           </div>
         </div>
 
+        {/* KPIs Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {kpiCards.map((kpi, index) => (
+            <Card key={index} className="hover-elevate">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{kpi.title}</p>
+                    <p className="text-2xl font-bold mt-2" data-testid={`kpi-${index}`}>{kpi.value}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${kpi.bgColor}`}>
+                    <kpi.icon className={`w-6 h-6 ${kpi.color}`} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
         {/* Welcome Card */}
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="text-xl">Bienvenido al Panel de Administración</CardTitle>
+            <CardTitle className="text-xl">Panel de Administración</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">
@@ -75,7 +139,7 @@ export default function Admin() {
             <Card 
               key={index}
               className="hover-elevate active-elevate-2 cursor-pointer transition-all"
-              onClick={section.action}
+              onClick={() => setLocation(section.route)}
               data-testid={`admin-section-${index}`}
             >
               <CardContent className="p-6">

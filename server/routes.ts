@@ -304,6 +304,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin KPIs endpoint
+  app.get("/api/admin/kpis", async (req, res) => {
+    try {
+      const n8nUrl = process.env.N8N_ADMIN_KPI_URL;
+      if (!n8nUrl) {
+        return res.status(500).json({ error: "N8N admin KPIs URL not configured" });
+      }
+
+      console.log("Fetching admin KPIs from n8n:", n8nUrl);
+      
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(n8nUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorMessage = 'Error al obtener KPIs administrativos';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            const text = await response.text();
+            errorMessage = text || `Error ${response.status}: ${response.statusText}`;
+          }
+        } catch {
+          errorMessage = `Error ${response.status}: ${response.statusText}`;
+        }
+        console.error("n8n admin KPIs error response:", errorMessage);
+        return res.status(response.status).json({ error: errorMessage });
+      }
+
+      let responseData = null;
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          responseData = await response.json();
+        } else {
+          responseData = await response.text();
+        }
+      } catch {
+        // If we can't parse the response, return error
+        return res.status(500).json({ error: 'Invalid response format from n8n' });
+      }
+      
+      console.log("Admin KPIs received from n8n:", responseData);
+      res.json(responseData);
+    } catch (error) {
+      console.error('Error fetching admin KPIs from n8n:', error);
+      
+      let errorMessage = 'Error interno del servidor';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Timeout al conectar con el servidor de KPIs. Intenta de nuevo.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      res.status(500).json({ 
+        error: errorMessage
+      });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

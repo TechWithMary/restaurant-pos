@@ -8,6 +8,10 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Login from "@/pages/login";
 import TableMap from "@/pages/table-map";
 import Admin from "@/pages/admin";
+import AdminMenu from "@/pages/admin-menu";
+import AdminVentas from "@/pages/admin-ventas";
+import AdminEmpleados from "@/pages/admin-empleados";
+import AdminConfiguracion from "@/pages/admin-configuracion";
 import POSSystem from "@/pages/pos-system";
 import NotFound from "@/pages/not-found";
 
@@ -18,6 +22,10 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/tables" component={TableMap} />
       <Route path="/admin" component={Admin} />
+      <Route path="/admin/menu" component={AdminMenu} />
+      <Route path="/admin/ventas" component={AdminVentas} />
+      <Route path="/admin/empleados" component={AdminEmpleados} />
+      <Route path="/admin/configuracion" component={AdminConfiguracion} />
       <Route path="/order/:tableId" component={POSSystem} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
