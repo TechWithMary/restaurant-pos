@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@shared/schema";
+import { formatColombianPrice } from "@/lib/utils";
 
 interface ProductGridProps {
   products: Product[];
@@ -33,7 +34,7 @@ export default function ProductGrid({ products, onProductSelect }: ProductGridPr
             </div>
             <div className="mt-auto">
               <div className="w-full bg-gradient-to-r from-primary via-blue-600 to-blue-700 text-white rounded-xl py-3 px-4 font-bold text-lg text-center shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-102">
-                €{parseFloat(product.price).toFixed(2)}
+                {formatColombianPrice(product.price)}
               </div>
             </div>
           </CardContent>

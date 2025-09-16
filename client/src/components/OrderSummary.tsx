@@ -1,7 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Minus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import type { OrderItemWithProduct } from "@shared/schema";
+import { formatColombianPrice } from "@/lib/utils";
 
 interface OrderSummaryProps {
   orderItems: OrderItemWithProduct[];
@@ -16,9 +19,12 @@ export default function OrderSummary({
   onRemoveItem,
   onSendToKitchen,
 }: OrderSummaryProps) {
+  const [includeTip, setIncludeTip] = useState(false);
+  
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const iva = subtotal * 0.21; // 21% IVA
-  const total = subtotal + iva;
+  const iva = subtotal * 0.19; // 19% IVA Colombia
+  const tip = subtotal * 0.10; // 10% propina voluntaria
+  const total = subtotal + iva + (includeTip ? tip : 0);
 
   return (
     <div className="flex flex-col h-full p-6">
@@ -49,7 +55,7 @@ export default function OrderSummary({
                         {item.product.name}
                       </h4>
                       <p className="text-sm text-muted-foreground">
-                        €{parseFloat(item.product.price).toFixed(2)} c/u
+                        {formatColombianPrice(item.product.price)} c/u
                       </p>
                     </div>
                     
@@ -87,7 +93,7 @@ export default function OrderSummary({
                     
                     <div className="text-right min-w-[70px]">
                       <span className="font-bold text-base text-accent">
-                        €{item.subtotal.toFixed(2)}
+                        {formatColombianPrice(item.subtotal)}
                       </span>
                     </div>
                   </div>
@@ -97,15 +103,31 @@ export default function OrderSummary({
               <div className="border-t border-muted-foreground/20 pt-5 space-y-3">
                 <div className="flex justify-between text-base">
                   <span className="font-medium">Subtotal:</span>
-                  <span className="font-semibold" data-testid="text-subtotal">€{subtotal.toFixed(2)}</span>
+                  <span className="font-semibold" data-testid="text-subtotal">{formatColombianPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-base">
-                  <span className="font-medium">IVA (21%):</span>
-                  <span className="font-semibold" data-testid="text-iva">€{iva.toFixed(2)}</span>
+                  <span className="font-medium">IVA (19%):</span>
+                  <span className="font-semibold" data-testid="text-iva">{formatColombianPrice(iva)}</span>
                 </div>
+                
+                {/* Sección de Propina Voluntaria */}
+                <div className="flex justify-between items-center text-base py-2 px-3 bg-muted/20 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={includeTip}
+                      onCheckedChange={setIncludeTip}
+                      data-testid="switch-tip"
+                    />
+                    <span className="font-medium">Propina Voluntaria (10%):</span>
+                  </div>
+                  <span className="font-semibold text-green-600" data-testid="text-tip">
+                    {formatColombianPrice(tip)}
+                  </span>
+                </div>
+                
                 <div className="flex justify-between text-xl font-bold border-t border-muted-foreground/20 pt-3">
                   <span>Total:</span>
-                  <span className="text-accent" data-testid="text-total">€{total.toFixed(2)}</span>
+                  <span className="text-accent" data-testid="text-total">{formatColombianPrice(total)}</span>
                 </div>
               </div>
             </>
