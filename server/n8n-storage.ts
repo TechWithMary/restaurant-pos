@@ -30,9 +30,7 @@ export class N8nStorage implements IStorage {
     }
 
     try {
-      console.log("=== DEBUGGING n8n FETCH ===");
-      console.log("Intentando conectar a:", n8nMenuUrl);
-      console.log("Variable de entorno N8N_MENU_URL:", process.env.N8N_MENU_URL);
+      console.log("Fetching menu from n8n:", n8nMenuUrl);
       
       const response = await fetch(n8nMenuUrl, {
         method: 'GET',
@@ -60,15 +58,12 @@ export class N8nStorage implements IStorage {
       }
 
       const data = await response.json();
-      console.log("=== DATOS RECIBIDOS DE n8n ===");
-      console.log("Respuesta completa:", JSON.stringify(data, null, 2));
-      console.log("Tipo de dato:", typeof data);
-      console.log("Es array:", Array.isArray(data));
+      console.log("Received menu data from n8n:", data);
 
       // Parse the data - adapt this based on your n8n API format
       let categories: Category[] = [];
       let products: Product[] = [];
-
+      
       // If your n8n returns { categories: [...], products: [...] }
       if (data.categories && data.products) {
         categories = data.categories;
@@ -79,6 +74,27 @@ export class N8nStorage implements IStorage {
         // Separate categories and products from the array
         categories = data.filter(item => item.type === 'category');
         products = data.filter(item => item.type === 'product');
+      }
+      // If your n8n returns a single product object in Spanish format
+      else if (data.nombre && data.precio && data.categoria) {
+        // Create category from the categoria field
+        const categoryName = data.categoria;
+        const categoryId = categoryName.toLowerCase().replace(/\s+/g, '-');
+        
+        categories = [{
+          id: categoryId,
+          name: categoryName,
+          icon: this.getCategoryIcon(categoryName)
+        }];
+        
+        // Transform Spanish product to English format
+        products = [{
+          id: data.id.toString(),
+          name: data.nombre,
+          description: data.descripcion || '',
+          price: data.precio,
+          categoryId: categoryId
+        }];
       }
       // If your n8n returns a different format, adapt accordingly
       else {
@@ -104,10 +120,7 @@ export class N8nStorage implements IStorage {
       return { categories, products };
       
     } catch (error) {
-      console.error('=== ERROR DETALLADO AL CONECTAR CON n8n ===');
-      console.error('Objeto de error completo:', error);
-      console.error('Mensaje:', error instanceof Error ? error.message : 'Error desconocido');
-      console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
+      console.error('Error fetching menu from n8n:', error);
       
       // Return cached data if available, even if stale
       if (this.cachedCategories.length > 0) {
@@ -119,6 +132,25 @@ export class N8nStorage implements IStorage {
       console.log("n8n unavailable, using fallback menu data");
       return this.getFallbackMenuData();
     }
+  }
+
+  private getCategoryIcon(categoryName: string): string {
+    const categoryMap: Record<string, string> = {
+      'ensaladas': 'Salad',
+      'platos principales': 'ChefHat',
+      'principales': 'ChefHat',
+      'bebidas': 'Coffee',
+      'postres': 'Cake',
+      'aperitivos': 'Utensils',
+      'sopas': 'Bowl',
+      'carnes': 'Beef',
+      'pescados': 'Fish',
+      'vegetarianos': 'Leaf',
+      'mariscos': 'Fish'
+    };
+    
+    const key = categoryName.toLowerCase();
+    return categoryMap[key] || 'Utensils';
   }
 
   private getFallbackMenuData(): { categories: Category[], products: Product[] } {
