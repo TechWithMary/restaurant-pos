@@ -34,15 +34,37 @@ export default function POSSystem() {
   // Fetch categories
   const { data: categories = [] } = useQuery<Category[]>({
     queryKey: ['/api/categories'],
+    queryFn: async () => {
+      console.log('Intentando conectar a:', '/api/categories');
+      try {
+        const response = await fetch('/api/categories');
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+        console.log('Categorías obtenidas exitosamente:', data);
+        return data;
+      } catch (error) {
+        console.error('Error detallado al obtener categorías:', error);
+        throw error;
+      }
+    },
   });
 
   // Fetch products by category
   const { data: filteredProducts = [] } = useQuery<Product[]>({
     queryKey: ['/api/products', selectedCategoryId],
     queryFn: async () => {
-      const response = await fetch(`/api/products?categoryId=${selectedCategoryId}`);
-      if (!response.ok) throw new Error('Failed to fetch products');
-      return response.json();
+      const urlProductos = `/api/products?categoryId=${selectedCategoryId}`;
+      console.log('Intentando conectar a:', urlProductos);
+      try {
+        const response = await fetch(urlProductos);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+        console.log('Productos obtenidos exitosamente:', data);
+        return data;
+      } catch (error) {
+        console.error('Error detallado al obtener productos:', error);
+        throw error;
+      }
     },
     enabled: !!selectedCategoryId,
   });

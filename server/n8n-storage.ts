@@ -30,7 +30,9 @@ export class N8nStorage implements IStorage {
     }
 
     try {
-      console.log("Fetching menu from n8n:", n8nMenuUrl);
+      console.log("=== DEBUGGING n8n FETCH ===");
+      console.log("Intentando conectar a:", n8nMenuUrl);
+      console.log("Variable de entorno N8N_MENU_URL:", process.env.N8N_MENU_URL);
       
       const response = await fetch(n8nMenuUrl, {
         method: 'GET',
@@ -58,7 +60,10 @@ export class N8nStorage implements IStorage {
       }
 
       const data = await response.json();
-      console.log("Received menu data from n8n:", data);
+      console.log("=== DATOS RECIBIDOS DE n8n ===");
+      console.log("Respuesta completa:", JSON.stringify(data, null, 2));
+      console.log("Tipo de dato:", typeof data);
+      console.log("Es array:", Array.isArray(data));
 
       // Parse the data - adapt this based on your n8n API format
       let categories: Category[] = [];
@@ -99,7 +104,10 @@ export class N8nStorage implements IStorage {
       return { categories, products };
       
     } catch (error) {
-      console.error('Error fetching menu from n8n:', error);
+      console.error('=== ERROR DETALLADO AL CONECTAR CON n8n ===');
+      console.error('Objeto de error completo:', error);
+      console.error('Mensaje:', error instanceof Error ? error.message : 'Error desconocido');
+      console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
       
       // Return cached data if available, even if stale
       if (this.cachedCategories.length > 0) {
