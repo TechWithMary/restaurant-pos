@@ -25,7 +25,8 @@ export class N8nStorage implements IStorage {
 
     const n8nMenuUrl = process.env.N8N_MENU_URL;
     if (!n8nMenuUrl) {
-      throw new Error("N8N_MENU_URL not configured");
+      console.log("N8N_MENU_URL not configured, using fallback menu data");
+      return this.getFallbackMenuData();
     }
 
     try {
@@ -80,6 +81,12 @@ export class N8nStorage implements IStorage {
         // Try to extract categories and products from whatever format received
         categories = data.categories || [];
         products = data.products || data.items || [];
+      }
+
+      // If we didn't get valid data from n8n, use fallback
+      if (categories.length === 0 || products.length === 0) {
+        console.log("n8n returned empty or invalid data, using fallback menu data");
+        return this.getFallbackMenuData();
       }
 
       // Cache the data
