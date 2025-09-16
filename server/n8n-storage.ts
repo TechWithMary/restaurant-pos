@@ -71,9 +71,34 @@ export class N8nStorage implements IStorage {
       }
       // If your n8n returns just an array of items with categories mixed in
       else if (Array.isArray(data)) {
-        // Separate categories and products from the array
-        categories = data.filter(item => item.type === 'category');
-        products = data.filter(item => item.type === 'product');
+        // Check if items have Spanish format (nombre, precio, categoria)
+        if (data.length > 0 && data[0].nombre && data[0].precio && data[0].categoria) {
+          // Get unique categories from the data
+          const uniqueCategories = new Set<string>();
+          data.forEach((item: any) => {
+            if (item.categoria) uniqueCategories.add(item.categoria);
+          });
+          
+          // Create categories array
+          categories = Array.from(uniqueCategories).map((categoryName, index) => ({
+            id: categoryName.toLowerCase().replace(/\s+/g, '-'),
+            name: categoryName,
+            icon: this.getCategoryIcon(categoryName)
+          }));
+          
+          // Transform products
+          products = data.map((item: any) => ({
+            id: item.id.toString(),
+            name: item.nombre,
+            description: item.descripcion || '',
+            price: item.precio,
+            categoryId: item.categoria.toLowerCase().replace(/\s+/g, '-')
+          }));
+        } else {
+          // Original logic for arrays with type property
+          categories = data.filter(item => item.type === 'category');
+          products = data.filter(item => item.type === 'product');
+        }
       }
       // If your n8n returns a single product object in Spanish format
       else if (data.nombre && data.precio && data.categoria) {
