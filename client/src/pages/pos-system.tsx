@@ -168,44 +168,81 @@ export default function POSSystem() {
 
   // Populate existing order items when loading from n8n
   useEffect(() => {
-    if (isExistingOrder && existingOrderData && !existingOrderLoading) {
+    if (isExistingOrder && existingOrderData && !existingOrderLoading && mesaId) {
       console.log('Populating existing order from n8n:', existingOrderData);
       
-      // Check if the response has the expected structure
-      if (existingOrderData.items && Array.isArray(existingOrderData.items)) {
-        console.log('Found existing order items to populate:', existingOrderData.items.length);
-        
-        // For each item in the existing order, add it to our local storage
-        existingOrderData.items.forEach(async (item: any) => {
-          try {
-            // Add each item to our order
-            const response = await fetch('/api/order-items', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                productId: item.productId || item.product_id,
-                quantity: item.quantity || 1,
-                mesaId: mesaId
-              })
-            });
-            
-            if (response.ok) {
-              console.log('Successfully added existing item:', item);
-            } else {
-              console.error('Failed to add existing item:', item);
-            }
-          } catch (error) {
-            console.error('Error adding existing item:', error);
+      const populateExistingOrder = async () => {
+        // Check if the response has the expected structure
+        if (existingOrderData.items && Array.isArray(existingOrderData.items)) {
+          console.log('Found existing order items to populate:', existingOrderData.items.length);
+          
+          // First, get current order items to check for duplicates
+          const existingItems = orderItems || [];
+          const existingProductIds = new Set(existingItems.map(item => item.productId));
+          
+          const itemsToAdd = existingOrderData.items.filter((item: any) => {
+            const productId = item.productId || item.product_id;
+            return productId && !existingProductIds.has(productId);
+          });
+          
+          if (itemsToAdd.length === 0) {
+            console.log('All items from n8n already exist in local order, skipping population');
+            return;
           }
-        });
-        
-        // Refresh the order items after populating
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
-        }, 1000);
-      }
+          
+          console.log(`Adding ${itemsToAdd.length} new items from n8n (${existingOrderData.items.length - itemsToAdd.length} duplicates avoided)`);
+          
+          // Process items sequentially to avoid race conditions
+          const results = [];
+          for (const item of itemsToAdd) {
+            try {
+              const productId = item.productId || item.product_id;
+              const quantity = item.quantity || 1;
+              
+              console.log(`Adding existing item: productId=${productId}, quantity=${quantity}`);
+              
+              const response = await fetch('/api/order-items', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  productId: productId,
+                  quantity: quantity,
+                  mesaId: mesaId
+                })
+              });
+              
+              if (response.ok) {
+                const addedItem = await response.json();
+                results.push({ success: true, item: addedItem });
+                console.log('Successfully added existing item:', addedItem);
+              } else {
+                const errorData = await response.json();
+                results.push({ success: false, error: errorData, item });
+                console.error('Failed to add existing item:', item, errorData);
+              }
+            } catch (error) {
+              results.push({ success: false, error, item });
+              console.error('Error adding existing item:', error, item);
+            }
+          }
+          
+          // Log summary
+          const successful = results.filter(r => r.success).length;
+          const failed = results.filter(r => !r.success).length;
+          console.log(`Population completed: ${successful} successful, ${failed} failed`);
+          
+          // Refresh the order items after all operations complete
+          if (successful > 0) {
+            queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
+          }
+        }
+      };
+      
+      populateExistingOrder().catch(error => {
+        console.error('Error in populateExistingOrder:', error);
+      });
     }
-  }, [isExistingOrder, existingOrderData, existingOrderLoading, mesaId, queryClient]);
+  }, [isExistingOrder, existingOrderData, existingOrderLoading, mesaId, queryClient, orderItems]);
 
   // Set initial category selection
   useEffect(() => {

@@ -202,6 +202,22 @@ export class N8nStorage implements IStorage {
     return categoryMap[key] || 'Utensils';
   }
 
+  private normalizeTableStatus(status: string): string {
+    const statusMap: Record<string, string> = {
+      'disponible': 'available',
+      'ocupada': 'occupied', 
+      'reservada': 'reserved',
+      // Also handle already normalized statuses
+      'available': 'available',
+      'occupied': 'occupied',
+      'reserved': 'reserved'
+    };
+    
+    const normalizedStatus = statusMap[status?.toLowerCase()] || 'available';
+    console.log(`Normalizing table status: "${status}" → "${normalizedStatus}"`);
+    return normalizedStatus;
+  }
+
   private getFallbackMenuData(): { categories: Category[], products: Product[] } {
     const categories: Category[] = [
       { id: "1", name: "Platos Principales", icon: "ChefHat" },
@@ -339,13 +355,15 @@ export class N8nStorage implements IStorage {
           const existingTable = this.tables.get(tableId);
           
           if (existingTable) {
-            // Update status from n8n
+            // Update status from n8n and normalize Spanish→English
+            const rawStatus = n8nTable.status || n8nTable.estado || existingTable.status;
+            const normalizedStatus = this.normalizeTableStatus(rawStatus);
             const updatedTable = {
               ...existingTable,
-              status: n8nTable.status || n8nTable.estado || existingTable.status
+              status: normalizedStatus
             };
             this.tables.set(tableId, updatedTable);
-            console.log(`Updated table ${tableId} status to:`, updatedTable.status);
+            console.log(`Updated table ${tableId} status from "${rawStatus}" to:`, updatedTable.status);
           }
         });
       }
@@ -378,7 +396,10 @@ export class N8nStorage implements IStorage {
 
   async createTable(table: InsertTable): Promise<Table> {
     console.log('N8nStorage: Creating new table:', table);
-    const newTable: Table = { ...table };
+    const newTable: Table = { 
+      ...table,
+      status: table.status || "available" // Ensure status is always defined
+    };
     this.tables.set(newTable.id, newTable);
     console.log('N8nStorage: Table created successfully:', newTable);
     // TODO: En el futuro, podríamos sincronizar este cambio con n8n
