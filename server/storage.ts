@@ -3,9 +3,11 @@ import {
   type Product, 
   type OrderItem, 
   type OrderItemWithProduct,
+  type Table,
   type InsertCategory,
   type InsertProduct,
-  type InsertOrderItem 
+  type InsertOrderItem,
+  type InsertTable
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -26,12 +28,19 @@ export interface IStorage {
   updateOrderItemQuantity(id: string, quantity: number, mesaId: number): Promise<OrderItem | undefined>;
   deleteOrderItem(id: string, mesaId: number): Promise<boolean>;
   clearOrderItems(mesaId: number): Promise<void>;
+  
+  // Tables/Mesas
+  getTables(): Promise<Table[]>;
+  getTable(id: number): Promise<Table | undefined>;
+  updateTableStatus(id: number, status: string): Promise<Table | undefined>;
+  createTable(table: InsertTable): Promise<Table>;
 }
 
 export class MemStorage implements IStorage {
   private categories: Map<string, Category> = new Map();
   private products: Map<string, Product> = new Map();
   private orderItems: Map<string, OrderItem> = new Map();
+  private tables: Map<number, Table> = new Map();
 
   constructor() {
     this.seedData();
@@ -61,6 +70,20 @@ export class MemStorage implements IStorage {
     ];
 
     productsData.forEach(prod => this.products.set(prod.id, prod));
+
+    // Seed tables/mesas
+    const tablesData: Table[] = [
+      { id: 1, number: 1, capacity: 4, status: "available" },
+      { id: 2, number: 2, capacity: 2, status: "occupied" },
+      { id: 3, number: 3, capacity: 6, status: "available" },
+      { id: 4, number: 4, capacity: 4, status: "reserved" },
+      { id: 5, number: 5, capacity: 2, status: "available" },
+      { id: 6, number: 6, capacity: 8, status: "available" },
+      { id: 7, number: 7, capacity: 4, status: "occupied" },
+      { id: 8, number: 8, capacity: 2, status: "available" },
+    ];
+
+    tablesData.forEach(table => this.tables.set(table.id, table));
   }
 
   // Categories
@@ -136,6 +159,38 @@ export class MemStorage implements IStorage {
       .map(([id]) => id);
     
     itemsToDelete.forEach(id => this.orderItems.delete(id));
+  }
+
+  // Tables/Mesas
+  async getTables(): Promise<Table[]> {
+    console.log('MemStorage: Getting all tables');
+    return Array.from(this.tables.values());
+  }
+
+  async getTable(id: number): Promise<Table | undefined> {
+    console.log('MemStorage: Getting table with id:', id);
+    return this.tables.get(id);
+  }
+
+  async updateTableStatus(id: number, status: string): Promise<Table | undefined> {
+    console.log(`MemStorage: Updating table ${id} status to:`, status);
+    const table = this.tables.get(id);
+    if (table) {
+      const updatedTable = { ...table, status };
+      this.tables.set(id, updatedTable);
+      console.log('MemStorage: Table updated successfully:', updatedTable);
+      return updatedTable;
+    }
+    console.log('MemStorage: Table not found for update:', id);
+    return undefined;
+  }
+
+  async createTable(table: InsertTable): Promise<Table> {
+    console.log('MemStorage: Creating new table:', table);
+    const newTable: Table = { ...table };
+    this.tables.set(newTable.id, newTable);
+    console.log('MemStorage: Table created successfully:', newTable);
+    return newTable;
   }
 }
 

@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, sendToKitchenSchema } from "@shared/schema";
+import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, insertTableSchema, sendToKitchenSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Categories API
@@ -263,8 +263,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(response.status).json({ success: false, error: errorMessage });
       }
 
-      // If successful, clear the order and return success
+      // If successful, clear the order and update table status to "occupied"
       await storage.clearOrderItems(mesa_id);
+      
+      // Actualizar el estado de la mesa a "occupied" después de enviar el pedido
+      try {
+        const updatedTable = await storage.updateTableStatus(mesa_id, "occupied");
+        if (updatedTable) {
+          console.log(`Mesa ${mesa_id} status updated to "occupied" after order sent`);
+        }
+      } catch (error) {
+        console.error(`Error updating table ${mesa_id} status:`, error);
+        // No fallar el envío del pedido si no se puede actualizar la mesa
+      }
       
       let responseData = null;
       try {
@@ -301,6 +312,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false, 
         error: errorMessage
       });
+    }
+  });
+
+  // Tables/Mesas API
+  app.get("/api/tables", async (req, res) => {
+    try {
+      const tables = await storage.getTables();
+      console.log("Fetching all tables, found:", tables.length);
+      res.json(tables);
+    } catch (error) {
+      console.error("Error fetching tables:", error);
+      res.status(500).json({ error: "Failed to fetch tables" });
+    }
+  });
+
+  app.get("/api/tables/:id", async (req, res) => {
+    try {
+      const tableId = parseInt(req.params.id);
+      if (isNaN(tableId) || tableId <= 0) {
+        return res.status(400).json({ error: "Invalid table ID" });
+      }
+      
+      const table = await storage.getTable(tableId);
+      if (!table) {
+        return res.status(404).json({ error: "Table not found" });
+      }
+      
+      console.log(`Fetching table ${tableId}:`, table);
+      res.json(table);
+    } catch (error) {
+      console.error("Error fetching table:", error);
+      res.status(500).json({ error: "Failed to fetch table" });
+    }
+  });
+
+  app.put("/api/tables/:id/status", async (req, res) => {
+    try {
+      const tableId = parseInt(req.params.id);
+      if (isNaN(tableId) || tableId <= 0) {
+        return res.status(400).json({ error: "Invalid table ID" });
+      }
+      
+      const { status } = req.body;
+      if (!status || typeof status !== 'string') {
+        return res.status(400).json({ error: "Status is required and must be a string" });
+      }
+      
+      // Validar que el status sea uno de los valores permitidos
+      const validStatuses = ['available', 'occupied', 'reserved'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
+      }
+      
+      const updatedTable = await storage.updateTableStatus(tableId, status);
+      if (!updatedTable) {
+        return res.status(404).json({ error: "Table not found" });
+      }
+      
+      console.log(`Updated table ${tableId} status to "${status}":`, updatedTable);
+      res.json(updatedTable);
+    } catch (error) {
+      console.error("Error updating table status:", error);
+      res.status(500).json({ error: "Failed to update table status" });
     }
   });
 

@@ -2,9 +2,11 @@ import {
   type Category, 
   type Product, 
   type OrderItem, 
+  type Table,
   type InsertCategory,
   type InsertProduct,
-  type InsertOrderItem
+  type InsertOrderItem,
+  type InsertTable
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 
@@ -12,8 +14,30 @@ export class N8nStorage implements IStorage {
   private orderItems: Map<string, OrderItem> = new Map();
   private cachedCategories: Category[] = [];
   private cachedProducts: Product[] = [];
+  private tables: Map<number, Table> = new Map();
   private lastFetch = 0;
   private cacheTimeout = 60000; // 1 minute cache
+
+  constructor() {
+    this.seedTables();
+  }
+
+  private seedTables() {
+    // Seed tables/mesas con datos de prueba
+    const tablesData: Table[] = [
+      { id: 1, number: 1, capacity: 4, status: "available" },
+      { id: 2, number: 2, capacity: 2, status: "occupied" },
+      { id: 3, number: 3, capacity: 6, status: "available" },
+      { id: 4, number: 4, capacity: 4, status: "reserved" },
+      { id: 5, number: 5, capacity: 2, status: "available" },
+      { id: 6, number: 6, capacity: 8, status: "available" },
+      { id: 7, number: 7, capacity: 4, status: "occupied" },
+      { id: 8, number: 8, capacity: 2, status: "available" },
+    ];
+
+    tablesData.forEach(table => this.tables.set(table.id, table));
+    console.log("N8nStorage: Seeded", tablesData.length, "tables");
+  }
 
   private async fetchMenuFromN8n(): Promise<{ categories: Category[], products: Product[] }> {
     const now = Date.now();
@@ -270,5 +294,39 @@ export class N8nStorage implements IStorage {
       .map(([id]) => id);
     
     itemsToDelete.forEach(id => this.orderItems.delete(id));
+  }
+
+  // Tables/Mesas (local storage with potential n8n sync later)
+  async getTables(): Promise<Table[]> {
+    console.log('N8nStorage: Getting all tables');
+    return Array.from(this.tables.values());
+  }
+
+  async getTable(id: number): Promise<Table | undefined> {
+    console.log('N8nStorage: Getting table with id:', id);
+    return this.tables.get(id);
+  }
+
+  async updateTableStatus(id: number, status: string): Promise<Table | undefined> {
+    console.log(`N8nStorage: Updating table ${id} status to:`, status);
+    const table = this.tables.get(id);
+    if (table) {
+      const updatedTable = { ...table, status };
+      this.tables.set(id, updatedTable);
+      console.log('N8nStorage: Table updated successfully:', updatedTable);
+      // TODO: En el futuro, podríamos sincronizar este cambio con n8n
+      return updatedTable;
+    }
+    console.log('N8nStorage: Table not found for update:', id);
+    return undefined;
+  }
+
+  async createTable(table: InsertTable): Promise<Table> {
+    console.log('N8nStorage: Creating new table:', table);
+    const newTable: Table = { ...table };
+    this.tables.set(newTable.id, newTable);
+    console.log('N8nStorage: Table created successfully:', newTable);
+    // TODO: En el futuro, podríamos sincronizar este cambio con n8n
+    return newTable;
   }
 }

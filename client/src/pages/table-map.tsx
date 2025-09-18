@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users } from "lucide-react";
+import { ArrowLeft, Users, Loader2 } from "lucide-react";
+import type { Table } from "@shared/schema";
 
 export default function TableMap() {
   const [, setLocation] = useLocation();
@@ -27,6 +29,7 @@ export default function TableMap() {
   };
 
   const handleTableClick = (tableNumber: number, status: string) => {
+    console.log(`Table ${tableNumber} clicked with status:`, status);
     if (status === "available") {
       setSelectedTable(tableNumber);
       setNumberOfPeople("");
@@ -36,23 +39,25 @@ export default function TableMap() {
 
   const handleConfirmTable = () => {
     if (selectedTable && numberOfPeople && parseInt(numberOfPeople) > 0) {
+      console.log(`Confirming table ${selectedTable} with ${numberOfPeople} people`);
       selectTable(selectedTable, parseInt(numberOfPeople));
       setLocation(`/order/${selectedTable}`);
       setIsModalOpen(false);
     }
   };
 
-  // Simulación de mesas del restaurante
-  const tables = [
-    { id: 1, number: 1, capacity: 4, status: "available" },
-    { id: 2, number: 2, capacity: 2, status: "occupied" },
-    { id: 3, number: 3, capacity: 6, status: "available" },
-    { id: 4, number: 4, capacity: 4, status: "reserved" },
-    { id: 5, number: 5, capacity: 2, status: "available" },
-    { id: 6, number: 6, capacity: 8, status: "available" },
-    { id: 7, number: 7, capacity: 4, status: "occupied" },
-    { id: 8, number: 8, capacity: 2, status: "available" },
-  ];
+  // Fetch tables from API
+  const { data: tables = [], isLoading: tablesLoading, error: tablesError } = useQuery<Table[]>({
+    queryKey: ['/api/tables'],
+    queryFn: async () => {
+      console.log('Fetching tables from API');
+      const response = await fetch('/api/tables');
+      if (!response.ok) throw new Error('Failed to fetch tables');
+      const data = await response.json();
+      console.log('Tables fetched from API:', data);
+      return data;
+    },
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -125,17 +130,54 @@ export default function TableMap() {
           </CardContent>
         </Card>
 
-        {/* Tables Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6">
-          {tables.map((table) => (
-            <Card 
-              key={table.id}
-              className={`hover-elevate active-elevate-2 transition-all ${
-                table.status === "available" ? "cursor-pointer" : "cursor-not-allowed opacity-75"
-              }`}
-              onClick={() => handleTableClick(table.number, table.status)}
-              data-testid={`table-${table.number}`}
-            >
+        {/* Loading State */}
+        {tablesLoading && (
+          <Card className="mb-6">
+            <CardContent className="flex items-center justify-center p-8">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mr-3" />
+              <span className="text-lg text-muted-foreground">Cargando mesas...</span>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Error State */}
+        {tablesError && (
+          <Card className="mb-6">
+            <CardContent className="text-center p-8">
+              <div className="text-red-500 mb-3">⚠️</div>
+              <h3 className="text-lg font-semibold text-red-600 mb-2">Error al cargar las mesas</h3>
+              <p className="text-muted-foreground">
+                {tablesError instanceof Error ? tablesError.message : 'No se pudieron cargar las mesas del restaurante'}
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Empty State */}
+        {!tablesLoading && !tablesError && tables.length === 0 && (
+          <Card className="mb-6">
+            <CardContent className="text-center p-8">
+              <div className="text-muted-foreground mb-3">🍽️</div>
+              <h3 className="text-lg font-semibold mb-2">No hay mesas disponibles</h3>
+              <p className="text-muted-foreground">
+                No se encontraron mesas en el sistema.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tables Grid - Only show when we have data and no error */}
+        {!tablesLoading && !tablesError && tables.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-6">
+            {tables.map((table) => (
+              <Card 
+                key={table.id}
+                className={`hover-elevate active-elevate-2 transition-all ${
+                  table.status === "available" ? "cursor-pointer" : "cursor-not-allowed opacity-75"
+                }`}
+                onClick={() => handleTableClick(table.number, table.status)}
+                data-testid={`table-${table.number}`}
+              >
               <CardContent className="p-6 text-center">
                 <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-white font-bold text-xl ${getStatusColor(table.status)}`}>
                   {table.number}
@@ -148,8 +190,9 @@ export default function TableMap() {
                 <p className="text-sm font-medium">{getStatusText(table.status)}</p>
               </CardContent>
             </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="mt-8 text-center">
