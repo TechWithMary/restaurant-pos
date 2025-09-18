@@ -202,21 +202,6 @@ export class N8nStorage implements IStorage {
     return categoryMap[key] || 'Utensils';
   }
 
-  private normalizeTableStatus(status: string): string {
-    const statusMap: Record<string, string> = {
-      'disponible': 'available',
-      'ocupada': 'occupied', 
-      'reservada': 'reserved',
-      // Also handle already normalized statuses
-      'available': 'available',
-      'occupied': 'occupied',
-      'reserved': 'reserved'
-    };
-    
-    const normalizedStatus = statusMap[status?.toLowerCase()] || 'available';
-    console.log(`Normalizing table status: "${status}" → "${normalizedStatus}"`);
-    return normalizedStatus;
-  }
 
   private getFallbackMenuData(): { categories: Category[], products: Product[] } {
     const categories: Category[] = [
@@ -312,60 +297,101 @@ export class N8nStorage implements IStorage {
     itemsToDelete.forEach(id => this.orderItems.delete(id));
   }
 
+  // Extract n8n base URL from the configured endpoint
+  private getN8nBaseUrl(): string | null {
+    const n8nUrl = process.env.N8N_ORDER_BASE_URL;
+    if (!n8nUrl) return null;
+    
+    // Extract base URL from: https://domain/webhook/id/api/pedido/mesa/:mesaId
+    const match = n8nUrl.match(/(https:\/\/[^\/]+\/webhook\/[^\/]+)/);
+    return match ? match[1] : null;
+  }
+
+  // Normalize table status from Spanish to English
+  private normalizeTableStatus(status: string): string {
+    const statusMap: { [key: string]: string } = {
+      'disponible': 'available',
+      'ocupada': 'occupied', 
+      'reservada': 'reserved',
+      'available': 'available',
+      'occupied': 'occupied',
+      'reserved': 'reserved'
+    };
+    
+    const normalized = statusMap[status.toLowerCase()] || 'available';
+    console.log(`Normalizing status: "${status}" -> "${normalized}"`);
+    return normalized;
+  }
+
   // Tables/Mesas (fetch from n8n with local cache)
   async getTables(): Promise<Table[]> {
     console.log('N8nStorage: Getting all tables from n8n');
     
     try {
-      const n8nUrl = process.env.N8N_ORDER_BASE_URL;
-      if (!n8nUrl) {
-        console.log('N8N_ORDER_BASE_URL not configured, using cached tables');
+      const n8nBaseUrl = this.getN8nBaseUrl();
+      if (!n8nBaseUrl) {
+        console.log('N8N_ORDER_BASE_URL not configured properly, using cached tables');
         return Array.from(this.tables.values());
       }
 
-      // Fetch current table statuses from n8n
-      const tablesStatusUrl = `${n8nUrl}/api/mesas/estado`;
-      console.log('Fetching table statuses from n8n:', tablesStatusUrl);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-      
-      const response = await fetch(tablesStatusUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
+      // Try different possible endpoints for table status
+      const possibleEndpoints = [
+        `${n8nBaseUrl}/api/mesas/estado`,
+        `${n8nBaseUrl}/api/mesas`, 
+        `${n8nBaseUrl}/mesas`,
+        `${n8nBaseUrl}/tables`
+      ];
 
-      if (!response.ok) {
-        console.warn(`Failed to fetch tables from n8n (${response.status}), using cached data`);
-        return Array.from(this.tables.values());
-      }
-
-      const n8nTablesData = await response.json();
-      console.log('Table statuses received from n8n:', n8nTablesData);
-      
-      // Update local cache with n8n data
-      if (Array.isArray(n8nTablesData)) {
-        n8nTablesData.forEach((n8nTable: any) => {
-          const tableId = n8nTable.id || n8nTable.mesa_id || n8nTable.number;
-          const existingTable = this.tables.get(tableId);
+      for (const tablesStatusUrl of possibleEndpoints) {
+        console.log('Trying n8n endpoint:', tablesStatusUrl);
+        
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
           
-          if (existingTable) {
-            // Update status from n8n and normalize Spanish→English
-            const rawStatus = n8nTable.status || n8nTable.estado || existingTable.status;
-            const normalizedStatus = this.normalizeTableStatus(rawStatus);
-            const updatedTable = {
-              ...existingTable,
-              status: normalizedStatus
-            };
-            this.tables.set(tableId, updatedTable);
-            console.log(`Updated table ${tableId} status from "${rawStatus}" to:`, updatedTable.status);
+          const response = await fetch(tablesStatusUrl, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+
+          if (response.ok) {
+            const n8nTablesData = await response.json();
+            console.log('Table statuses received from n8n:', n8nTablesData);
+            
+            // Update local cache with n8n data
+            if (Array.isArray(n8nTablesData)) {
+              n8nTablesData.forEach((n8nTable: any) => {
+                const tableId = n8nTable.id || n8nTable.mesa_id || n8nTable.number;
+                const existingTable = this.tables.get(tableId);
+                
+                if (existingTable) {
+                  // Update status from n8n and normalize Spanish→English
+                  const rawStatus = n8nTable.status || n8nTable.estado || existingTable.status;
+                  const normalizedStatus = this.normalizeTableStatus(rawStatus);
+                  const updatedTable = {
+                    ...existingTable,
+                    status: normalizedStatus
+                  };
+                  this.tables.set(tableId, updatedTable);
+                  console.log(`Updated table ${tableId} status from "${rawStatus}" to:`, updatedTable.status);
+                }
+              });
+            }
+            
+            // Successfully got data from this endpoint, break out of the loop
+            break;
+          } else {
+            console.warn(`Endpoint ${tablesStatusUrl} failed with status ${response.status}`);
           }
-        });
+        } catch (endpointError) {
+          console.warn(`Failed to fetch from ${tablesStatusUrl}:`, endpointError);
+          // Continue to next endpoint
+        }
       }
       
       return Array.from(this.tables.values());
