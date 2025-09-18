@@ -434,7 +434,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log("Admin KPIs received from n8n:", responseData);
-      res.json(responseData);
+      
+      // Transform string values from n8n to numbers for frontend compatibility
+      const transformedData = {
+        ventas_hoy: parseFloat(responseData.ventas_hoy) || 0,
+        personal_activo: parseInt(responseData.personal_activo) || 0,
+        mesas_ocupadas: parseInt(responseData.mesas_ocupadas) || 0,
+        mesas_totales: parseInt(responseData.mesas_totales) || 0
+      };
+      
+      console.log("Transformed KPIs data (strings to numbers):", transformedData);
+      res.json(transformedData);
     } catch (error) {
       console.error('Error fetching admin KPIs from n8n:', error);
       
