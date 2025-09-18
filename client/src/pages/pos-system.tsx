@@ -23,6 +23,10 @@ export default function POSSystem() {
   
   const tableId = params.tableId ? parseInt(params.tableId) : null;
   
+  // Check if we're loading an existing order
+  const urlParams = new URLSearchParams(window.location.search);
+  const isExistingOrder = urlParams.get('existing') === 'true';
+  
   // Redirect if no table selected or not authenticated
   useEffect(() => {
     if (!auth.isAuthenticated || !tableId) {
@@ -30,6 +34,7 @@ export default function POSSystem() {
       return;
     }
   }, [auth.isAuthenticated, tableId, setLocation]);
+
 
   // Fetch categories
   const { data: categories = [] } = useQuery<Category[]>({
@@ -45,6 +50,20 @@ export default function POSSystem() {
       return response.json();
     },
     enabled: !!selectedCategoryId,
+  });
+
+  // Fetch existing order from n8n if this is an occupied table
+  const { data: existingOrderData, isLoading: existingOrderLoading } = useQuery({
+    queryKey: ['/api/pedido/mesa', tableId],
+    queryFn: async () => {
+      console.log(`Fetching existing order from n8n for mesa ${tableId}`);
+      const response = await fetch(`/api/pedido/mesa/${tableId}`);
+      if (!response.ok) throw new Error('Failed to fetch existing order');
+      const data = await response.json();
+      console.log('Existing order data from n8n:', data);
+      return data;
+    },
+    enabled: !!tableId && isExistingOrder, // Solo ejecutar cuando venga de mesa ocupada
   });
 
   // Fetch current order items - mesa-scoped usando el mesa_id del contexto
@@ -146,6 +165,47 @@ export default function POSSystem() {
       queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
     },
   });
+
+  // Populate existing order items when loading from n8n
+  useEffect(() => {
+    if (isExistingOrder && existingOrderData && !existingOrderLoading) {
+      console.log('Populating existing order from n8n:', existingOrderData);
+      
+      // Check if the response has the expected structure
+      if (existingOrderData.items && Array.isArray(existingOrderData.items)) {
+        console.log('Found existing order items to populate:', existingOrderData.items.length);
+        
+        // For each item in the existing order, add it to our local storage
+        existingOrderData.items.forEach(async (item: any) => {
+          try {
+            // Add each item to our order
+            const response = await fetch('/api/order-items', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                productId: item.productId || item.product_id,
+                quantity: item.quantity || 1,
+                mesaId: mesaId
+              })
+            });
+            
+            if (response.ok) {
+              console.log('Successfully added existing item:', item);
+            } else {
+              console.error('Failed to add existing item:', item);
+            }
+          } catch (error) {
+            console.error('Error adding existing item:', error);
+          }
+        });
+        
+        // Refresh the order items after populating
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
+        }, 1000);
+      }
+    }
+  }, [isExistingOrder, existingOrderData, existingOrderLoading, mesaId, queryClient]);
 
   // Set initial category selection
   useEffect(() => {
