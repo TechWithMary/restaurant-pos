@@ -34,6 +34,11 @@ export default function TableMap() {
       setSelectedTable(tableNumber);
       setNumberOfPeople("");
       setIsModalOpen(true);
+    } else if (status === "occupied") {
+      // Navegar directamente al POS con pedido existente
+      console.log(`Loading existing order for occupied table ${tableNumber}`);
+      selectTable(tableNumber, 0); // Set 0 people since it's an existing order
+      setLocation(`/order/${tableNumber}?existing=true`);
     }
   };
 
@@ -173,7 +178,7 @@ export default function TableMap() {
               <Card 
                 key={table.id}
                 className={`hover-elevate active-elevate-2 transition-all ${
-                  table.status === "available" ? "cursor-pointer" : "cursor-not-allowed opacity-75"
+                  table.status === "available" || table.status === "occupied" ? "cursor-pointer" : "cursor-not-allowed opacity-75"
                 }`}
                 onClick={() => handleTableClick(table.number, table.status)}
                 data-testid={`table-${table.number}`}
@@ -197,7 +202,7 @@ export default function TableMap() {
         {/* Quick Actions */}
         <div className="mt-8 text-center">
           <p className="text-muted-foreground mb-4">
-            Selecciona una mesa disponible (verde) para comenzar a tomar un pedido
+            Selecciona una mesa disponible (verde) para comenzar un nuevo pedido, o una mesa ocupada (roja) para continuar un pedido existente
           </p>
         </div>
 
