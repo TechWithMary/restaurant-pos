@@ -463,6 +463,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Endpoint para obtener pedido existente por mesa desde n8n
+  app.get("/api/pedido/mesa/:id", async (req, res) => {
+    try {
+      const mesaId = req.params.id;
+      const n8nBaseUrl = process.env.N8N_ORDER_BASE_URL;
+      
+      if (!n8nBaseUrl) {
+        return res.status(500).json({ error: "N8N order base URL not configured" });
+      }
+
+      console.log(`Fetching existing order for mesa ${mesaId} from n8n`);
+      
+      // Construir URL dinámica para obtener pedido por mesa
+      const n8nUrl = `${n8nBaseUrl}/api/pedido/mesa/${mesaId}`;
+      
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      const response = await fetch(n8nUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorMessage = 'Error al obtener pedido de la mesa';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorData.error || errorMessage;
+          } else {
+            const text = await response.text();
+            errorMessage = text || `Error ${response.status}: ${response.statusText}`;
+          }
+        } catch {
+          errorMessage = `Error ${response.status}: ${response.statusText}`;
+        }
+        console.error(`n8n order fetch error for mesa ${mesaId}:`, errorMessage);
+        return res.status(response.status).json({ error: errorMessage });
+      }
+
+      let responseData = null;
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          responseData = await response.json();
+        } else {
+          responseData = await response.text();
+        }
+      } catch {
+        return res.status(500).json({ error: 'Invalid response format from n8n' });
+      }
+      
+      console.log(`Order data received from n8n for mesa ${mesaId}:`, responseData);
+      res.json(responseData);
+    } catch (error) {
+      console.error('Error fetching order from n8n:', error);
+      
+      let errorMessage = 'Error interno del servidor';
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = 'Timeout al conectar con el servidor de pedidos. Intenta de nuevo.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      res.status(500).json({ 
+        error: errorMessage
+      });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
