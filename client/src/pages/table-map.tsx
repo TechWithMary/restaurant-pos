@@ -1,21 +1,28 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, Loader2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ArrowLeft, Users, Loader2, Settings, CheckCircle, XCircle, Clock } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { Table } from "@shared/schema";
 
 export default function TableMap() {
   const [, setLocation] = useLocation();
   const { auth, selectTable, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [numberOfPeople, setNumberOfPeople] = useState<string>("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [managingTable, setManagingTable] = useState<Table | null>(null);
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
 
   // Authentication guard - redirect if not authenticated
   if (!auth.isAuthenticated) {
@@ -48,6 +55,45 @@ export default function TableMap() {
       selectTable(selectedTable, parseInt(numberOfPeople));
       setLocation(`/order/${selectedTable}`);
       setIsModalOpen(false);
+    }
+  };
+
+  // Mutation para cambiar estado de mesa
+  const updateTableStatusMutation = useMutation({
+    mutationFn: async ({ tableId, status }: { tableId: number; status: string }) => {
+      return await apiRequest('PUT', `/api/tables/${tableId}/status`, { status });
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tables'] });
+      toast({
+        title: "Estado actualizado",
+        description: `Mesa ${variables.tableId} ahora está ${getStatusText(variables.status)}.`,
+      });
+      setIsManageModalOpen(false);
+      setManagingTable(null);
+    },
+    onError: (error) => {
+      console.error('Error updating table status:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el estado de la mesa. Intenta de nuevo.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleManageTable = (table: Table, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setManagingTable(table);
+    setIsManageModalOpen(true);
+  };
+
+  const handleStatusChange = (newStatus: string) => {
+    if (managingTable) {
+      updateTableStatusMutation.mutate({
+        tableId: managingTable.id,
+        status: newStatus
+      });
     }
   };
 
@@ -177,24 +223,35 @@ export default function TableMap() {
             {tables.map((table) => (
               <Card 
                 key={table.id}
-                className={`hover-elevate active-elevate-2 transition-all ${
-                  table.status === "available" || table.status === "occupied" ? "cursor-pointer" : "cursor-not-allowed opacity-75"
+                className={`hover-elevate active-elevate-2 transition-all relative ${
+                  table.status === "available" || table.status === "occupied" ? "cursor-pointer" : "cursor-default"
                 }`}
                 onClick={() => handleTableClick(table.number, table.status)}
                 data-testid={`table-${table.number}`}
               >
-              <CardContent className="p-6 text-center">
-                <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-white font-bold text-xl ${getStatusColor(table.status)}`}>
-                  {table.number}
-                </div>
-                <h3 className="font-semibold text-lg mb-2">Mesa {table.number}</h3>
-                <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground mb-2">
-                  <Users className="w-4 h-4" />
-                  <span>{table.capacity} personas</span>
-                </div>
-                <p className="text-sm font-medium">{getStatusText(table.status)}</p>
-              </CardContent>
-            </Card>
+                {/* Management Button */}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="absolute top-2 right-2 h-8 w-8 opacity-70 hover:opacity-100 z-10"
+                  onClick={(e) => handleManageTable(table, e)}
+                  data-testid={`manage-table-${table.number}`}
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+
+                <CardContent className="p-6 text-center">
+                  <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center text-white font-bold text-xl ${getStatusColor(table.status)}`}>
+                    {table.number}
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">Mesa {table.number}</h3>
+                  <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground mb-2">
+                    <Users className="w-4 h-4" />
+                    <span>{table.capacity} personas</span>
+                  </div>
+                  <p className="text-sm font-medium">{getStatusText(table.status)}</p>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
@@ -202,7 +259,9 @@ export default function TableMap() {
         {/* Quick Actions */}
         <div className="mt-8 text-center">
           <p className="text-muted-foreground mb-4">
-            Selecciona una mesa disponible (verde) para comenzar un nuevo pedido, o una mesa ocupada (roja) para continuar un pedido existente
+            Selecciona una mesa disponible (verde) para comenzar un nuevo pedido, o una mesa ocupada (roja) para continuar un pedido existente.
+            <br />
+            Usa el botón ⚙️ para cambiar el estado de cualquier mesa (disponible, ocupada, reservada).
           </p>
         </div>
 
@@ -249,6 +308,76 @@ export default function TableMap() {
                 data-testid="button-confirm-table"
               >
                 Confirmar Mesa
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal para gestionar estado de mesa */}
+        <Dialog open={isManageModalOpen} onOpenChange={setIsManageModalOpen}>
+          <DialogContent className="sm:max-w-[425px]" data-testid="manage-table-modal">
+            <DialogHeader>
+              <DialogTitle>Gestionar Mesa {managingTable?.number}</DialogTitle>
+              <DialogDescription>
+                Cambiar el estado de la mesa {managingTable?.number} ({managingTable?.capacity} personas)
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <p className="text-sm text-muted-foreground mb-4">
+                Estado actual: <span className="font-semibold">{managingTable && getStatusText(managingTable.status)}</span>
+              </p>
+              
+              <div className="space-y-3">
+                <Button
+                  className="w-full justify-start gap-3 hover-elevate active-elevate-2"
+                  variant={managingTable?.status === "available" ? "default" : "outline"}
+                  onClick={() => handleStatusChange("available")}
+                  disabled={updateTableStatusMutation.isPending}
+                  data-testid="button-set-available"
+                >
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  Marcar como Disponible
+                </Button>
+                
+                <Button
+                  className="w-full justify-start gap-3 hover-elevate active-elevate-2"
+                  variant={managingTable?.status === "occupied" ? "default" : "outline"}
+                  onClick={() => handleStatusChange("occupied")}
+                  disabled={updateTableStatusMutation.isPending}
+                  data-testid="button-set-occupied"
+                >
+                  <XCircle className="w-4 h-4 text-red-500" />
+                  Marcar como Ocupada
+                </Button>
+                
+                <Button
+                  className="w-full justify-start gap-3 hover-elevate active-elevate-2"
+                  variant={managingTable?.status === "reserved" ? "default" : "outline"}
+                  onClick={() => handleStatusChange("reserved")}
+                  disabled={updateTableStatusMutation.isPending}
+                  data-testid="button-set-reserved"
+                >
+                  <Clock className="w-4 h-4 text-yellow-500" />
+                  Marcar como Reservada
+                </Button>
+              </div>
+              
+              {updateTableStatusMutation.isPending && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary mr-2" />
+                  <span className="text-sm text-muted-foreground">Actualizando estado...</span>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 hover-elevate active-elevate-2"
+                onClick={() => setIsManageModalOpen(false)}
+                disabled={updateTableStatusMutation.isPending}
+                data-testid="button-cancel-manage"
+              >
+                Cancelar
               </Button>
             </div>
           </DialogContent>
