@@ -296,10 +296,65 @@ export class N8nStorage implements IStorage {
     itemsToDelete.forEach(id => this.orderItems.delete(id));
   }
 
-  // Tables/Mesas (local storage with potential n8n sync later)
+  // Tables/Mesas (fetch from n8n with local cache)
   async getTables(): Promise<Table[]> {
-    console.log('N8nStorage: Getting all tables');
-    return Array.from(this.tables.values());
+    console.log('N8nStorage: Getting all tables from n8n');
+    
+    try {
+      const n8nUrl = process.env.N8N_ORDER_BASE_URL;
+      if (!n8nUrl) {
+        console.log('N8N_ORDER_BASE_URL not configured, using cached tables');
+        return Array.from(this.tables.values());
+      }
+
+      // Fetch current table statuses from n8n
+      const tablesStatusUrl = `${n8nUrl}/api/mesas/estado`;
+      console.log('Fetching table statuses from n8n:', tablesStatusUrl);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      
+      const response = await fetch(tablesStatusUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`Failed to fetch tables from n8n (${response.status}), using cached data`);
+        return Array.from(this.tables.values());
+      }
+
+      const n8nTablesData = await response.json();
+      console.log('Table statuses received from n8n:', n8nTablesData);
+      
+      // Update local cache with n8n data
+      if (Array.isArray(n8nTablesData)) {
+        n8nTablesData.forEach((n8nTable: any) => {
+          const tableId = n8nTable.id || n8nTable.mesa_id || n8nTable.number;
+          const existingTable = this.tables.get(tableId);
+          
+          if (existingTable) {
+            // Update status from n8n
+            const updatedTable = {
+              ...existingTable,
+              status: n8nTable.status || n8nTable.estado || existingTable.status
+            };
+            this.tables.set(tableId, updatedTable);
+            console.log(`Updated table ${tableId} status to:`, updatedTable.status);
+          }
+        });
+      }
+      
+      return Array.from(this.tables.values());
+    } catch (error) {
+      console.warn('Error fetching tables from n8n, using cached data:', error);
+      return Array.from(this.tables.values());
+    }
   }
 
   async getTable(id: number): Promise<Table | undefined> {
