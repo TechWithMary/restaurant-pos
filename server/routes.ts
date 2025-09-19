@@ -386,6 +386,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create Stripe payment intent
+  app.post("/api/create-payment-intent", async (req, res) => {
+    try {
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const { amount, tableNumber, orderItems } = req.body;
+
+      if (!amount || typeof amount !== 'number' || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+
+      // Create payment intent with Stripe
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: 'eur',
+        metadata: {
+          tableNumber: tableNumber?.toString() || '',
+          orderItemCount: orderItems?.length?.toString() || '0',
+        },
+      });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+      });
+    } catch (error) {
+      console.error('Error creating payment intent:', error);
+      res.status(500).json({ error: 'Failed to create payment intent' });
+    }
+  });
+
+  // Complete payment and clear table
+  app.post("/api/complete-payment", async (req, res) => {
+    try {
+      const { 
+        tableId, 
+        paymentMethod, 
+        amount, 
+        cashReceived, 
+        change, 
+        tip, 
+        discount,
+        paymentIntentId 
+      } = req.body;
+
+      if (!tableId || typeof tableId !== 'number') {
+        return res.status(400).json({ error: "Valid table ID is required" });
+      }
+
+      if (!paymentMethod || !['cash', 'card'].includes(paymentMethod)) {
+        return res.status(400).json({ error: "Valid payment method is required" });
+      }
+
+      if (!amount || typeof amount !== 'number' || amount <= 0) {
+        return res.status(400).json({ error: "Valid amount is required" });
+      }
+
+      // Clear order items for this table
+      await storage.clearOrderItems(tableId);
+
+      // Update table status to available
+      await storage.updateTableStatus(tableId, "available");
+
+      // Log payment completion
+      console.log(`Payment completed for table ${tableId}:`, {
+        paymentMethod,
+        amount,
+        cashReceived,
+        change,
+        tip,
+        discount,
+        paymentIntentId,
+        timestamp: new Date().toISOString(),
+      });
+
+      res.json({
+        success: true,
+        message: "Payment completed successfully",
+        tableId,
+        paymentMethod,
+        amount,
+        tip,
+        discount,
+      });
+    } catch (error) {
+      console.error('Error completing payment:', error);
+      res.status(500).json({ error: 'Failed to complete payment' });
+    }
+  });
+
   // Admin KPIs endpoint
   app.get("/api/admin/kpis", async (req, res) => {
     try {
