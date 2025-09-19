@@ -13,6 +13,7 @@ import AdminVentas from "@/pages/admin-ventas";
 import AdminEmpleados from "@/pages/admin-empleados";
 import AdminConfiguracion from "@/pages/admin-configuracion";
 import POSSystem from "@/pages/pos-system";
+import OrderManagement from "@/pages/order-management";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/admin/empleados" component={AdminEmpleados} />
       <Route path="/admin/configuracion" component={AdminConfiguracion} />
       <Route path="/order/:tableId" component={POSSystem} />
+      <Route path="/order-management/:tableId" component={OrderManagement} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
