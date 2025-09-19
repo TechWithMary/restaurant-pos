@@ -38,14 +38,24 @@ export default function TableMap() {
   const handleTableClick = (tableNumber: number, status: string) => {
     console.log(`Table ${tableNumber} clicked with status:`, status);
     if (status === "available") {
-      setSelectedTable(tableNumber);
-      setNumberOfPeople("");
-      setIsModalOpen(true);
+      // Solo meseros pueden seleccionar mesas disponibles
+      if (auth.role !== "cajero") {
+        setSelectedTable(tableNumber);
+        setNumberOfPeople("");
+        setIsModalOpen(true);
+      }
     } else if (status === "occupied") {
-      // Navegar directamente al POS con pedido existente
-      console.log(`Loading existing order for occupied table ${tableNumber}`);
-      selectTable(tableNumber, 0); // Set 0 people since it's an existing order
-      setLocation(`/order/${tableNumber}?existing=true`);
+      if (auth.role === "cajero") {
+        // Cajero va a gestión de pedido
+        console.log(`Cajero accessing order management for table ${tableNumber}`);
+        selectTable(tableNumber, 0);
+        setLocation(`/order-management/${tableNumber}`);
+      } else {
+        // Mesero navega al POS con pedido existente
+        console.log(`Loading existing order for occupied table ${tableNumber}`);
+        selectTable(tableNumber, 0); // Set 0 people since it's an existing order
+        setLocation(`/order/${tableNumber}?existing=true`);
+      }
     }
   };
 
@@ -154,7 +164,9 @@ export default function TableMap() {
             <h1 className="text-3xl font-bold text-primary">Mapa de Mesas</h1>
           </div>
           <div className="text-right">
-            <p className="text-sm text-muted-foreground">Mesero ID: {auth.mesero_id}</p>
+            <p className="text-sm text-muted-foreground">
+              {auth.role === "cajero" ? "Cajero" : "Mesero"} ID: {auth.mesero_id}
+            </p>
           </div>
         </div>
 
@@ -259,9 +271,19 @@ export default function TableMap() {
         {/* Quick Actions */}
         <div className="mt-8 text-center">
           <p className="text-muted-foreground mb-4">
-            Selecciona una mesa disponible (verde) para comenzar un nuevo pedido, o una mesa ocupada (roja) para continuar un pedido existente.
-            <br />
-            Usa el botón ⚙️ para cambiar el estado de cualquier mesa (disponible, ocupada, reservada).
+            {auth.role === "cajero" ? (
+              <>
+                Haz clic en una mesa ocupada (roja) para gestionar su pedido y procesar el pago.
+                <br />
+                Usa el botón ⚙️ para cambiar el estado de cualquier mesa (disponible, ocupada, reservada).
+              </>
+            ) : (
+              <>
+                Selecciona una mesa disponible (verde) para comenzar un nuevo pedido, o una mesa ocupada (roja) para continuar un pedido existente.
+                <br />
+                Usa el botón ⚙️ para cambiar el estado de cualquier mesa (disponible, ocupada, reservada).
+              </>
+            )}
           </p>
         </div>
 
