@@ -187,7 +187,7 @@ export class MemStorage implements IStorage {
 
   async createTable(table: InsertTable): Promise<Table> {
     console.log('MemStorage: Creating new table:', table);
-    const newTable: Table = { ...table };
+    const newTable: Table = { ...table, status: table.status || "available" };
     this.tables.set(newTable.id, newTable);
     console.log('MemStorage: Table created successfully:', newTable);
     return newTable;
