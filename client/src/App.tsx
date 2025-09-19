@@ -22,6 +22,7 @@ function Router() {
       <Route path="/" component={Login} />
       <Route path="/login" component={Login} />
       <Route path="/tables" component={TableMap} />
+      <Route path="/table-map" component={TableMap} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/menu" component={AdminMenu} />
       <Route path="/admin/ventas" component={AdminVentas} />
