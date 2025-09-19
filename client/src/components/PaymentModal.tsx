@@ -103,11 +103,10 @@ export default function PaymentModal({
       await completePaymentMutation.mutateAsync({
         tableId,
         paymentMethod: "cash",
-        amount: finalTotal,
         cashReceived: parseFloat(cashReceived),
-        change,
         tip,
-        discount: discountAmount,
+        discount,
+        discountType,
       });
     } finally {
       setProcessing(false);
@@ -126,14 +125,25 @@ export default function PaymentModal({
 
     setProcessing(true);
     try {
-      // Create payment intent
+      // Create payment intent with server-calculated totals
       const paymentIntentResponse = await apiRequest('POST', '/api/create-payment-intent', {
-        amount: finalTotal,
-        tableNumber: tableId,
-        orderItems,
+        tableId,
+        tip,
+        discount,
+        discountType,
       });
 
-      const { clientSecret } = paymentIntentResponse;
+      const { clientSecret, paymentIntentId, calculatedTotals } = paymentIntentResponse as unknown as {
+        clientSecret: string;
+        paymentIntentId: string;
+        calculatedTotals: {
+          subtotal: number;
+          discount: number;
+          tax: number;
+          tip: number;
+          total: number;
+        };
+      };
 
       // Confirm payment
       const result = await stripe.confirmCardPayment(clientSecret, {
@@ -153,10 +163,10 @@ export default function PaymentModal({
         await completePaymentMutation.mutateAsync({
           tableId,
           paymentMethod: "card",
-          amount: finalTotal,
           paymentIntentId: result.paymentIntent.id,
           tip,
-          discount: discountAmount,
+          discount,
+          discountType,
         });
       }
     } catch (error) {

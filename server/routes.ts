@@ -389,25 +389,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create Stripe payment intent
   app.post("/api/create-payment-intent", async (req, res) => {
     try {
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const { amount, tableNumber, orderItems } = req.body;
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || process.env.TESTING_STRIPE_SECRET_KEY);
+      const { tableId, tip = 0, discount = 0, discountType = 'percentage' } = req.body;
 
-      if (!amount || typeof amount !== 'number' || amount <= 0) {
-        return res.status(400).json({ error: "Invalid amount" });
+      if (!tableId || typeof tableId !== 'number') {
+        return res.status(400).json({ error: "Valid table ID is required" });
       }
+
+      // Get order items from server-side storage (authoritative)
+      const orderItems = await storage.getOrderItems(tableId);
+      if (orderItems.length === 0) {
+        return res.status(400).json({ error: "No order items found for this table" });
+      }
+
+      // Calculate totals on server-side (authoritative)
+      let subtotal = 0;
+      for (const item of orderItems) {
+        const product = await storage.getProduct(item.productId);
+        if (product) {
+          subtotal += item.quantity * parseFloat(product.price);
+        }
+      }
+
+      // Apply discount
+      const discountAmount = discountType === 'percentage' 
+        ? Math.round((subtotal * discount) / 100 * 100) / 100
+        : discount;
+      const finalSubtotal = Math.max(0, subtotal - discountAmount);
+      
+      // Calculate tax and final total
+      const tax = Math.round(finalSubtotal * 0.1 * 100) / 100;
+      const tipAmount = Math.round(tip * 100) / 100;
+      const finalTotal = finalSubtotal + tax + tipAmount;
+      
+      // Convert to cents for Stripe
+      const amountInCents = Math.round(finalTotal * 100);
 
       // Create payment intent with Stripe
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(amount * 100), // Convert to cents
+        amount: amountInCents,
         currency: 'eur',
         metadata: {
-          tableNumber: tableNumber?.toString() || '',
-          orderItemCount: orderItems?.length?.toString() || '0',
+          tableId: tableId.toString(),
+          subtotal: subtotal.toString(),
+          discount: discountAmount.toString(),
+          tax: tax.toString(),
+          tip: tipAmount.toString(),
+          finalTotal: finalTotal.toString(),
         },
       });
 
       res.json({
         clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        calculatedTotals: {
+          subtotal,
+          discount: discountAmount,
+          tax,
+          tip: tipAmount,
+          total: finalTotal,
+        },
       });
     } catch (error) {
       console.error('Error creating payment intent:', error);
@@ -421,11 +462,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { 
         tableId, 
         paymentMethod, 
-        amount, 
         cashReceived, 
-        change, 
-        tip, 
-        discount,
+        tip = 0, 
+        discount = 0,
+        discountType = 'percentage',
         paymentIntentId 
       } = req.body;
 
@@ -437,24 +477,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Valid payment method is required" });
       }
 
-      if (!amount || typeof amount !== 'number' || amount <= 0) {
-        return res.status(400).json({ error: "Valid amount is required" });
+      // Get order items from server-side storage (authoritative)
+      const orderItems = await storage.getOrderItems(tableId);
+      if (orderItems.length === 0) {
+        return res.status(400).json({ error: "No order items found for this table" });
       }
 
-      // Clear order items for this table
-      await storage.clearOrderItems(tableId);
+      // Calculate authoritative totals on server-side
+      let subtotal = 0;
+      for (const item of orderItems) {
+        const product = await storage.getProduct(item.productId);
+        if (product) {
+          subtotal += item.quantity * parseFloat(product.price);
+        }
+      }
 
-      // Update table status to available
+      // Apply discount
+      const discountAmount = discountType === 'percentage' 
+        ? Math.round((subtotal * discount) / 100 * 100) / 100
+        : discount;
+      const finalSubtotal = Math.max(0, subtotal - discountAmount);
+      
+      // Calculate tax and final total
+      const tax = Math.round(finalSubtotal * 0.1 * 100) / 100;
+      const tipAmount = Math.round(tip * 100) / 100;
+      const finalTotal = finalSubtotal + tax + tipAmount;
+
+      // Validate payment method specific requirements
+      if (paymentMethod === 'cash') {
+        if (!cashReceived || typeof cashReceived !== 'number' || cashReceived < finalTotal) {
+          return res.status(400).json({ 
+            error: "Insufficient cash received",
+            required: finalTotal,
+            received: cashReceived 
+          });
+        }
+      }
+
+      if (paymentMethod === 'card') {
+        if (!paymentIntentId) {
+          return res.status(400).json({ error: "Payment intent ID is required for card payments" });
+        }
+
+        // Verify payment with Stripe
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || process.env.TESTING_STRIPE_SECRET_KEY);
+        try {
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          
+          if (paymentIntent.status !== 'succeeded') {
+            return res.status(400).json({ error: "Payment not completed in Stripe" });
+          }
+
+          const expectedAmountInCents = Math.round(finalTotal * 100);
+          if (paymentIntent.amount !== expectedAmountInCents) {
+            return res.status(400).json({ 
+              error: "Payment amount mismatch",
+              expected: expectedAmountInCents,
+              received: paymentIntent.amount 
+            });
+          }
+
+          if (paymentIntent.metadata.tableId !== tableId.toString()) {
+            return res.status(400).json({ error: "Payment intent does not match table ID" });
+          }
+        } catch (stripeError) {
+          console.error('Stripe verification error:', stripeError);
+          return res.status(400).json({ error: "Failed to verify payment with Stripe" });
+        }
+      }
+
+      // Payment verified - clear order items and free table
+      await storage.clearOrderItems(tableId);
       await storage.updateTableStatus(tableId, "available");
+
+      const change = paymentMethod === 'cash' ? Math.round((cashReceived - finalTotal) * 100) / 100 : 0;
 
       // Log payment completion
       console.log(`Payment completed for table ${tableId}:`, {
         paymentMethod,
-        amount,
+        finalTotal,
         cashReceived,
         change,
-        tip,
-        discount,
+        tip: tipAmount,
+        discount: discountAmount,
         paymentIntentId,
         timestamp: new Date().toISOString(),
       });
@@ -464,9 +569,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Payment completed successfully",
         tableId,
         paymentMethod,
-        amount,
-        tip,
-        discount,
+        amount: finalTotal,
+        tip: tipAmount,
+        discount: discountAmount,
+        change,
       });
     } catch (error) {
       console.error('Error completing payment:', error);
