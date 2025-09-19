@@ -5,13 +5,13 @@ export interface AuthState {
   isAuthenticated: boolean;
   mesero_id: number | null;
   mesa_id: number | null;
-  role: 'mesero' | 'admin' | null;
+  role: 'mesero' | 'admin' | 'cajero' | null;
   numberOfPeople?: number;
 }
 
 interface AuthContextType {
   auth: AuthState;
-  login: (mesero_id: number, role: 'mesero' | 'admin') => void;
+  login: (mesero_id: number, role: 'mesero' | 'admin' | 'cajero') => void;
   selectTable: (mesa_id: number, numberOfPeople: number) => void;
   logout: () => void;
   clearTable: () => void;
@@ -33,7 +33,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthState>(initialAuthState);
 
-  const login = (mesero_id: number, role: 'mesero' | 'admin') => {
+  const login = (mesero_id: number, role: 'mesero' | 'admin' | 'cajero') => {
     setAuth({
       isAuthenticated: true,
       mesero_id,
