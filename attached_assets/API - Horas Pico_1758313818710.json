@@ -1,0 +1,93 @@
+{
+  "name": "API - Horas Pico",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api/dashboard/horaspico",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "1035b923-b903-4813-ada9-fcec6a0998c8",
+      "name": "Webhook",
+      "webhookId": "e4f2363d-945c-4568-af62-6df8c6f1e42d"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $input.first().json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4fb00a41-3db1-435e-857c-b1b47f796447",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  EXTRACT(HOUR FROM created_at) as hora,\n  COUNT(id) as numero_ordenes\nFROM pedidos\nWHERE created_at >= date_trunc('week', CURRENT_DATE)\nGROUP BY hora\nORDER BY hora;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "dccd8600-5f16-4f89-937b-6ff818cb8f90",
+      "name": "Calcular Horas Pico",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Calcular Horas Pico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Horas Pico": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3b3cf09a-e082-402d-bbe7-04ee98dd8296",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "d1NrBJpwgaPBxRJH",
+  "tags": []
+}

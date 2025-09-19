@@ -1,0 +1,180 @@
+{
+  "name": "Sistema de Pedidos Inteligente",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nuevo-pedido",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "82e9bcb8-081e-4756-9323-feb471c60bf6",
+      "name": "Webhook",
+      "webhookId": "4f5b5563-27a4-4c92-bd69-3e39c36c15a2"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "5e4f0764-76cd-4b42-aedf-ef9be131e4f7",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, precio FROM productos WHERE id IN (\n  {{ $json.body.productos.map(p => p.producto_id).join(',') }}\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "eb3b3a7a-f760-45e6-bd0c-cd9a2243fc4a",
+      "name": "Obtener Precios de Productos",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recibimos los datos originales del Webhook\nconst pedidoOriginal = $('Webhook').first().json.body;\n// Recibimos los productos con sus precios del nodo anterior\nconst productosConPrecio = $('Obtener Precios de Productos').all().map(i => i.json);\n\nlet totalGeneral = 0;\n// Esta variable almacenará el texto para la consulta SQL, ej: \"(1, 10, 2, 15000, 30000), (1, 12, 1, 8000, 8000)\"\nlet detallesValuesString = \"\"; \n\nconst detallesParaInsertar = pedidoOriginal.productos.map((itemPedido, index) => {\n  const productoDB = productosConPrecio.find(p => p.id === itemPedido.producto_id);\n  const precioUnitario = parseFloat(productoDB.precio);\n  const subtotal = precioUnitario * itemPedido.cantidad;\n  totalGeneral += subtotal;\n  \n  // Construimos la cadena de texto para cada fila\n  const valueString = `({PEDIDO_ID_PLACEHOLDER}, ${itemPedido.producto_id}, ${itemPedido.cantidad}, ${precioUnitario}, ${subtotal})`;\n  \n  // La añadimos a nuestra variable principal, con una coma si no es el último item\n  detallesValuesString += valueString + (index < pedidoOriginal.productos.length - 1 ? ',' : '');\n  \n  return { /* Este return ya no es tan importante, pero lo dejamos por consistencia */ };\n});\n\n// Devolvemos todos los datos calculados para que los siguientes nodos los usen\nreturn [{\n  json: {\n    mesa_id: pedidoOriginal.mesa_id,\n    mesero_id: pedidoOriginal.mesero_id,\n    totalGeneral: totalGeneral,\n    // La nueva variable que usaremos en el siguiente nodo\n    detallesValuesString: detallesValuesString \n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a4798ed3-62b0-49a4-bd69-ce4803c1d6f5",
+      "name": "Calcular Total y Detalles"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pedidos (mesa_id, empleado_id, estado, total)\nVALUES (\n  {{ $('Calcular Total y Detalles').item.json.mesa_id }},\n  {{ $('Calcular Total y Detalles').item.json.mesero_id }},\n  'pendiente',\n  {{ $('Calcular Total y Detalles').item.json.totalGeneral }}\n)\nRETURNING id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        624,
+        0
+      ],
+      "id": "83d93dde-8d9a-442e-bb9f-68e6d98826eb",
+      "name": "Crear Pedido",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO detalle_pedidos (pedido_id, producto_id, cantidad, precio_unitario, subtotal)\nVALUES {{ $('Calcular Total y Detalles').item.json.detallesValuesString.replace(/{PEDIDO_ID_PLACEHOLDER}/g, $('Crear Pedido').item.json.id) }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        832,
+        0
+      ],
+      "id": "10cf8402-6d90-40a6-bd2e-1f497f66eee7",
+      "name": "Crear Detalles Pedido",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Obtener Precios de Productos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Precios de Productos": {
+      "main": [
+        [
+          {
+            "node": "Calcular Total y Detalles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Total y Detalles": {
+      "main": [
+        [
+          {
+            "node": "Crear Pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Pedido": {
+      "main": [
+        [
+          {
+            "node": "Crear Detalles Pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Detalles Pedido": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3bdbdf94-7716-48fa-9a5f-39dd454a27a6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "9GlapIe2Lop3ZBsP",
+  "tags": []
+}

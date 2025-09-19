@@ -1,0 +1,93 @@
+{
+  "name": "API_Dashboard_KPIs",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api/dashboard/kpis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        32,
+        0
+      ],
+      "id": "b9d29892-ff2c-4c94-8627-db8069af94c8",
+      "name": "Webhook",
+      "webhookId": "652ba70f-4f71-4570-b5af-54760ff293b0"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $input.first().json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a819a980-ea5d-4f7c-a777-0c7c8dadd11b",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  COALESCE(SUM(p.total), 0) AS ingresos,\n  COALESCE(COUNT(p.id), 0) AS ordenes,\n  COALESCE(AVG(p.total), 0) AS ticket_promedio,\n  (SELECT COALESCE(SUM(monto), 0) FROM gastos_diarios WHERE fecha >= date_trunc('week', CURRENT_DATE)) AS gastos\nFROM pedidos p\nWHERE p.created_at >= date_trunc('week', CURRENT_DATE);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "id": "fee9e59f-94fc-483f-847e-be14541e8ca5",
+      "name": "Calcular KPIS de la semana",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Calcular KPIS de la semana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular KPIS de la semana": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d75c8608-f2ff-49f6-837f-4e39c9ba4b52",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "dzwrx9iwCBjtL9fb",
+  "tags": []
+}

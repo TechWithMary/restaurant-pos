@@ -1,0 +1,321 @@
+{
+  "name": "Sistema de Cierre Inteligente",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 22,
+              "triggerAtMinute": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "da5994e4-a7b7-431e-8ad5-6f649b22d399",
+      "name": "Cierre Diario"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  DATE(p.created_at) as fecha,\n  COUNT(p.id) as total_pedidos,\n  SUM(p.total) as ventas_totales,\n  AVG(p.total) as promedio_por_pedido,\n  COUNT(DISTINCT p.mesa_id) as mesas_utilizadas,\n  COUNT(DISTINCT p.empleado_id) as empleados_activos,\n  -- Propinas del día\n  COALESCE(SUM(prop.monto), 0) as propinas_totales,\n  -- Gastos del día\n  COALESCE(SUM(g.monto), 0) as gastos_totales,\n  -- Órdenes de compra del día\n  COALESCE(SUM(oc.total), 0) as ordenes_compra_total,\n  -- Balance neto\n  (COALESCE(SUM(p.total), 0) + COALESCE(SUM(prop.monto), 0)) - \n  (COALESCE(SUM(g.monto), 0) + COALESCE(SUM(oc.total), 0)) as balance_neto\nFROM pedidos p\nLEFT JOIN propinas prop ON p.id = prop.pedido_id AND DATE(prop.fecha) = CURRENT_DATE\nLEFT JOIN gastos_diarios g ON DATE(g.fecha) = CURRENT_DATE\nLEFT JOIN ordenes_compra oc ON DATE(oc.fecha) = CURRENT_DATE\nWHERE DATE(p.created_at) = CURRENT_DATE\nGROUP BY DATE(p.created_at);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "4525d272-f3d0-4b07-bb01-e9175669aa21",
+      "name": "Reporte de Ventas",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  e.id,\n  e.nombre,\n  e.apellido,\n  e.rol,\n  COUNT(p.id) as pedidos_atendidos,\n  SUM(p.total) as ventas_generadas,\n  AVG(p.total) as promedio_por_pedido,\n  MIN(p.created_at) as primer_pedido,\n  MAX(p.created_at) as ultimo_pedido\nFROM empleados e\nLEFT JOIN pedidos p ON e.id = p.empleado_id \n  AND DATE(p.created_at) = CURRENT_DATE\nWHERE e.activo = true\nGROUP BY e.id, e.nombre, e.apellido, e.rol\nORDER BY ventas_generadas DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        592,
+        0
+      ],
+      "id": "586811dd-1dbb-4854-984d-f9d2cf0c2357",
+      "name": "Rendimiento por Empleado",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// --- 1. RECOLECCIÓN DE DATOS ---\nconst ventas = $('Reporte de Ventas').first().json;\n// LÍNEA NUEVA: Recolectamos los datos del nuevo nodo\nconst desglosePagos = $('Desglose por Método de Pago').all().map(i => i.json);\nconst iaResponseText = $('ChefBot Análisis').first().json.candidates[0].content.parts[0].text;\n\n// Limpiamos y parseamos la respuesta de la IA\nconst jsonMatch = iaResponseText.match(/{[\\s\\S]*}/);\nconst chefBotData = JSON.parse(jsonMatch[0]);\n\n// --- 2. PREPARACIÓN Y FORMATO ---\nconst fecha = new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });\nconst formatMoney = (value) => (parseFloat(value) || 0).toLocaleString('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 });\nconst balanceColor = ventas.balance_neto >= 0 ? '#28a745' : '#dc3545';\n\n// --- 3. CONSTRUCCIÓN DEL HTML ---\nlet html = `\n<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; }\n    .container { max-width: 800px; margin: auto; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n    .header { background: #333; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n    .content { padding: 30px; }\n    .section { margin-bottom: 30px; }\n    .section h2 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; font-size: 1.4em; }\n    table { width: 100%; border-collapse: collapse; margin-top: 15px; }\n    th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; }\n    th { background-color: #f2f2f2; }\n    .total-row td { font-weight: bold; background-color: #f9f9f9; }\n    .summary { font-style: italic; color: #555; text-align: center; margin-bottom: 30px; background: #f9f9f9; padding: 15px; border-radius: 5px; }\n    .insight-card { background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #28a745; }\n    .alert-card { background: #fbe9e7; padding: 15px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #d9534f; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\"><h1>Reporte de Cierre Diario</h1><p>${fecha}</p></div>\n    <div class=\"content\">\n      \n      <div class=\"section\">\n        <h2>Cierre de Caja (Z-Report)</h2>\n        <table>\n          <tr><td>(+) Ventas Totales</td><td>${formatMoney(ventas.ventas_totales)}</td></tr>\n          <tr><td>(+) Propinas Totales</td><td>${formatMoney(ventas.propinas_totales)}</td></tr>\n          <tr class=\"total-row\"><td>(=) Total Ingresos</td><td>${formatMoney(parseFloat(ventas.ventas_totales) + parseFloat(ventas.propinas_totales))}</td></tr>\n          <tr><td>(-) Gastos del Día</td><td>${formatMoney(ventas.gastos_totales)}</td></tr>\n          <tr><td>(-) Órdenes de Compra</td><td>${formatMoney(ventas.ordenes_compra_total)}</td></tr>\n          <tr class=\"total-row\" style=\"background-color: ${balanceColor}; color: ${ventas.balance_neto >= 0 ? 'inherit' : 'white'};\">\n            <td>(=) Balance Neto</td><td>${formatMoney(ventas.balance_neto)}</td>\n          </tr>\n        </table>\n      </div>\n\n      ${desglosePagos.length > 0 ? `\n      <div class=\"section\">\n        <h2>Desglose por Método de Pago</h2>\n        <table>\n          <thead>\n            <tr>\n              <th>Método de Pago</th>\n              <th># Transacciones</th>\n              <th>Total Recaudado</th>\n            </tr>\n          </thead>\n          <tbody>\n            ${desglosePagos.map(pago => `\n              <tr>\n                <td>${pago.metodo_pago}</td>\n                <td>${pago.transacciones_por_metodo}</td>\n                <td>${formatMoney(pago.total_por_metodo)}</td>\n              </tr>\n            `).join('')}\n          </tbody>\n        </table>\n      </div>` : ''}\n      <div class=\"section\">\n        <h2>🤖 Análisis Estratégico de ChefBot</h2>\n        <p class=\"summary\">\"${chefBotData.resumen_ejecutivo}\"</p>\n        <h3>Insights de Rendimiento</h3>\n        ${chefBotData.insights_rendimiento.map(insight => `<div class=\"insight-card\"><strong>${insight.tipo.replace(/_/g, ' ').toUpperCase()}:</strong> ${insight.insight} ${insight.nombre ? `<em>(${insight.nombre})</em>` : ''}</div>`).join('')}\n        <h3>Alertas Críticas</h3>\n        ${chefBotData.alertas_criticas.map(alerta => `<div class=\"alert-card\"><strong>ALERTA:</strong> ${alerta}</div>`).join('')}\n      </div>\n    </div>\n  </div>\n</body>\n</html>`;\n\n// --- 4. DEVOLUCIÓN DE DATOS ---\nreturn {\n  json: {\n    subject: `💰 Reporte de Cierre y Estrategia - ${fecha}`,\n    html: html,\n    to: $vars.MANAGEMENT_EMAIL || 'mary@blockflux.co'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        0
+      ],
+      "id": "704cbbd6-7afa-411b-925e-67c6f5910639",
+      "name": "Construir Reporte"
+    },
+    {
+      "parameters": {
+        "fromEmail": "mary@blockflux.ceo",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1840,
+        0
+      ],
+      "id": "b07942e7-1d24-4c7d-83cc-7fcdb5f911c6",
+      "name": "Enviar Reporte",
+      "webhookId": "32184d38-5bc0-4446-af58-b898e35304c5",
+      "credentials": {
+        "smtp": {
+          "id": "DUnRyrIaP0JumMKM",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  g.concepto,\n  g.monto,\n  g.categoria,\n  e.nombre || ' ' || e.apellido as empleado_responsable,\n  g.notas\nFROM gastos_diarios g\nLEFT JOIN empleados e ON g.empleado_id = e.id\nWHERE DATE(g.fecha) = CURRENT_DATE\nORDER BY g.monto DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        800,
+        0
+      ],
+      "id": "160f2341-8b68-4c53-a431-f7dcfc383e2e",
+      "name": "Gastos Detallados",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  oc.id,\n  p.nombre as proveedor,\n  oc.total,\n  oc.estado,\n  e.nombre || ' ' || e.apellido as empleado_solicitante,\n  oc.notas\nFROM ordenes_compra oc\nLEFT JOIN proveedores p ON oc.proveedor_id = p.id\nLEFT JOIN empleados e ON oc.empleado_id = e.id\nWHERE DATE(oc.fecha) = CURRENT_DATE\nORDER BY oc.total DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1008,
+        0
+      ],
+      "id": "19d471b6-1e45-4ed9-8347-ff0a9dcb472c",
+      "name": "Ordenes de Compra",
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent?key=AIzaSyALxR1Bixw1Nm5lK_g9_fdQPXUIgV5VXv8",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Construir Prompt para ChefBot').first().json.bodyFinal }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1424,
+        0
+      ],
+      "id": "dd7fa7e7-bbec-422f-ba43-9794d0cb4f18",
+      "name": "ChefBot Análisis"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Recolectamos los datos de todos los nodos de la base de datos\nconst ventas = $('Reporte de Ventas').first().json;\nconst empleados = $('Rendimiento por Empleado').all().map(i => i.json);\nconst gastos = $('Gastos Detallados').all().map(i => i.json);\nconst ordenes = $('Ordenes de Compra').all().map(i => i.json);\n// LÍNEA NUEVA: Recolectamos los datos del nuevo nodo\nconst desglosePagos = $('Desglose por Método de Pago').all().map(i => i.json);\n\n// 2. Construimos el prompt para la IA con todos los datos\nconst prompt = `Eres ChefBot, un analista de negocios experto en restaurantes. Analiza los datos consolidados de hoy y proporciona insights accionables.\n\nDATOS DISPONIBLES:\n- VENTAS GENERALES: ${JSON.stringify(ventas)}\n- DESGLOSE DE PAGOS: ${JSON.stringify(desglosePagos)}\n- RENDIMIENTO EMPLEADOS: ${JSON.stringify(empleados)}\n- GASTOS DEL DÍA: ${JSON.stringify(gastos)}\n- ÓRDENES DE COMPRA: ${JSON.stringify(ordenes)}\n\nResponde ÚNICAMENTE con un objeto JSON (sin markdown) con la siguiente estructura exacta:\n{\n  \"resumen_ejecutivo\": \"Un titular de máximo 280 caracteres que resuma el día.\",\n  \"diagnostico_financiero\": {\n    \"balance_neto\": ${ventas.balance_neto},\n    \"analisis\": \"Un análisis breve del balance neto.\"\n  },\n  \"insights_rendimiento\": [\n    {\"tipo\": \"empleado_destacado\", \"nombre\": \"Nombre del empleado con mejor rendimiento\", \"insight\": \"Explicación breve.\"},\n    {\"tipo\": \"producto_estrella\", \"insight\": \"Identifica un producto con gran rendimiento y sugiere una acción.\" Oportunidad de mejora basada en los datos de pago, como por ejemplo si un método de pago es inusualmente alto o bajo.}\n    {\"tipo\": \"oportunidad_mejora\", \"insight\": \"Identifica la mayor área de oportunidad del día.\"}\n  ],\n  \"alertas_criticas\": [\n    \"String con la alerta financiera más importante.\",\n    \"String con una alerta operativa.\"\n  ]\n}`;\n\n// 3. Creamos el objeto completo para la API de Google\nconst bodyObject = {\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": prompt\n    }]\n  }]\n};\n\n// 4. Convertimos todo a un texto JSON, listo para ser enviado\nconst finalJsonString = JSON.stringify(bodyObject);\n\n// 5. Devolvemos el texto final\nreturn {\n  json: {\n    bodyFinal: finalJsonString\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        0
+      ],
+      "id": "b92391fb-28e1-45ef-af45-e007fca3c1a0",
+      "name": "Construir Prompt para ChefBot"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  metodo_pago,\n  SUM(monto) as total_por_metodo,\n  COUNT(id) as transacciones_por_metodo\nFROM pagos\nWHERE DATE(created_at) = CURRENT_DATE AND estado = 'completado'\nGROUP BY metodo_pago;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        0
+      ],
+      "id": "f0bcacbb-02a2-4d32-80df-f876136314dc",
+      "name": "Desglose por Método de Pago",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cierre Diario": {
+      "main": [
+        [
+          {
+            "node": "Reporte de Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reporte de Ventas": {
+      "main": [
+        [
+          {
+            "node": "Desglose por Método de Pago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rendimiento por Empleado": {
+      "main": [
+        [
+          {
+            "node": "Gastos Detallados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Reporte": {
+      "main": [
+        [
+          {
+            "node": "Enviar Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gastos Detallados": {
+      "main": [
+        [
+          {
+            "node": "Ordenes de Compra",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ordenes de Compra": {
+      "main": [
+        [
+          {
+            "node": "Construir Prompt para ChefBot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChefBot Análisis": {
+      "main": [
+        [
+          {
+            "node": "Construir Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Prompt para ChefBot": {
+      "main": [
+        [
+          {
+            "node": "ChefBot Análisis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Desglose por Método de Pago": {
+      "main": [
+        [
+          {
+            "node": "Rendimiento por Empleado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8c786790-bc14-420c-b017-fd66cd365a82",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "4MYY4afwyg0lwcdK",
+  "tags": []
+}

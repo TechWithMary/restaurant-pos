@@ -22,7 +22,7 @@ export default function OrderSummary({
   const [includeTip, setIncludeTip] = useState(false);
   
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const iva = subtotal * 0.19; // 19% IVA Colombia
+  const iva = subtotal * 0.08; // 8% Impoconsumo Colombia
   const tip = subtotal * 0.10; // 10% propina voluntaria
   const total = subtotal + iva + (includeTip ? tip : 0);
 
@@ -106,7 +106,7 @@ export default function OrderSummary({
                   <span className="font-semibold" data-testid="text-subtotal">{formatColombianPrice(subtotal)}</span>
                 </div>
                 <div className="flex justify-between text-base">
-                  <span className="font-medium">IVA (19%):</span>
+                  <span className="font-medium">Impoconsumo (8%):</span>
                   <span className="font-semibold" data-testid="text-iva">{formatColombianPrice(iva)}</span>
                 </div>
                 

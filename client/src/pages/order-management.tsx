@@ -90,7 +90,7 @@ export default function OrderManagement() {
 
   // Calculate totals
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const tax = subtotal * 0.1; // 10% tax
+  const tax = subtotal * 0.08; // 8% Impoconsumo Colombia
   const total = subtotal + tax;
 
   const handleDeleteItem = (itemId: string) => {
@@ -116,7 +116,7 @@ export default function OrderManagement() {
           <span>${formatPrice(subtotal)}</span>
         </div>
         <div style="display: flex; justify-content: space-between; margin: 5px 0;">
-          <span>IVA (10%):</span>
+          <span>Impoconsumo (8%):</span>
           <span>${formatPrice(tax)}</span>
         </div>
         <div style="display: flex; justify-content: space-between; margin: 10px 0; font-weight: bold; font-size: 1.2em;">
@@ -305,7 +305,7 @@ export default function OrderManagement() {
                     <span className="text-lg font-semibold">{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-lg">IVA (10%):</span>
+                    <span className="text-lg">Impoconsumo (8%):</span>
                     <span className="text-lg font-semibold">{formatPrice(tax)}</span>
                   </div>
                   <Separator />

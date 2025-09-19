@@ -1,0 +1,125 @@
+{
+  "name": "API_Finalizar_Pago",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/finalizar-pago",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "44f4d587-42fe-4259-8035-42b906e22a35",
+      "name": "Receptor",
+      "webhookId": "f65bdca4-3473-475b-97da-4323690101d7"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE pedidos \nSET estado = 'pagado' \nWHERE id = {{ $('Receptor').item.json.body.pedido_id }};",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "id": "1a3f512e-30a6-4b48-8cdd-ccf3ff184107",
+      "name": "Actualizar Estado del Pedido",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pagos (pedido_id, monto, metodo_pago, estado) \nVALUES ({{ $('Receptor').item.json.body.pedido_id }}, {{ $('Receptor').item.json.body.total }}, '{{ $('Receptor').item.json.body.metodo_pago }}', 'completado');",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        448,
+        0
+      ],
+      "id": "2d5695b0-9763-4dac-8c72-994ca18db642",
+      "name": "Insertar el Registro de Pago",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        672,
+        0
+      ],
+      "id": "e8e2b6c3-613f-4917-92a1-af53c84f0bbd",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receptor": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado del Pedido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Estado del Pedido": {
+      "main": [
+        [
+          {
+            "node": "Insertar el Registro de Pago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insertar el Registro de Pago": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2e8908ff-dae0-40c6-bb4a-136512806d84",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "lEJQfFlGwlg7F8Na",
+  "tags": []
+}

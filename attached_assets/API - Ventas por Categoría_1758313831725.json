@@ -1,0 +1,93 @@
+{
+  "name": "API - Ventas por Categoría",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api/dashboard/categorias",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        192
+      ],
+      "id": "a8778861-409b-49de-a15a-075b31f4c00c",
+      "name": "Webhook",
+      "webhookId": "353c7ef7-4508-437e-8839-33d7a9e73cda"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $input.first().json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        384,
+        192
+      ],
+      "id": "b001b783-a4f4-4b4a-9d5a-18155df82068",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  p.categoria,\n  SUM(dp.subtotal) as total_vendido\nFROM detalle_pedidos dp\nJOIN productos p ON dp.producto_id = p.id\nWHERE dp.created_at >= date_trunc('week', CURRENT_DATE)\nGROUP BY p.categoria\nORDER BY total_vendido DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        192
+      ],
+      "id": "509995a8-da59-410b-9618-6e521c592270",
+      "name": "Calcular Ventas Por Categoria",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Calcular Ventas Por Categoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Ventas Por Categoria": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "75249055-b3bf-489a-aff1-a49cb491dec9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "9QwjZXg2pPWy1y4S",
+  "tags": []
+}

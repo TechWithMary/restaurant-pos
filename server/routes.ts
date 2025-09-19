@@ -417,8 +417,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : discount;
       const finalSubtotal = Math.max(0, subtotal - discountAmount);
       
-      // Calculate tax and final total
-      const tax = Math.round(finalSubtotal * 0.1 * 100) / 100;
+      // Calculate Impoconsumo and final total (8% Colombia)
+      const tax = Math.round(finalSubtotal * 0.08 * 100) / 100;
       const tipAmount = Math.round(tip * 100) / 100;
       const finalTotal = finalSubtotal + tax + tipAmount;
       
@@ -498,8 +498,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         : discount;
       const finalSubtotal = Math.max(0, subtotal - discountAmount);
       
-      // Calculate tax and final total
-      const tax = Math.round(finalSubtotal * 0.1 * 100) / 100;
+      // Calculate Impoconsumo and final total (8% Colombia)
+      const tax = Math.round(finalSubtotal * 0.08 * 100) / 100;
       const tipAmount = Math.round(tip * 100) / 100;
       const finalTotal = finalSubtotal + tax + tipAmount;
 

@@ -52,7 +52,7 @@ export default function PaymentModal({
     ? (subtotal * discount) / 100 
     : discount;
   const finalSubtotal = Math.max(0, subtotal - discountAmount);
-  const finalTax = finalSubtotal * 0.1;
+  const finalTax = finalSubtotal * 0.08; // 8% Impoconsumo Colombia
   const finalTotal = finalSubtotal + finalTax + tip;
   const change = paymentMethod === "cash" ? Math.max(0, parseFloat(cashReceived) - finalTotal) : 0;
 
@@ -239,7 +239,7 @@ export default function PaymentModal({
                   )}
                   
                   <div className="flex justify-between">
-                    <span>IVA (10%):</span>
+                    <span>Impoconsumo (8%):</span>
                     <span>{formatPrice(finalTax)}</span>
                   </div>
                   
