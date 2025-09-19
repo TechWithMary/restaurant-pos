@@ -46,6 +46,11 @@ export default function Login() {
         login(3, "mesero");
         setLocation("/tables");
         break;
+      case "5555":
+        // Cajero
+        login(555, "cajero");
+        setLocation("/table-map");
+        break;
       case "9999":
         // Admin
         login(999, "admin");
