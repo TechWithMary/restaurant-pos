@@ -2,7 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
-import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, insertTableSchema, sendToKitchenSchema } from "@shared/schema";
+import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, insertTableSchema, sendToKitchenSchema, completePaymentColombianSchema } from "@shared/schema";
+import { PaymentService, type ColombianPaymentData } from "./payments-service";
+import { getN8nClient } from "./n8n-client";
+import { randomUUID } from "crypto";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
@@ -383,6 +386,237 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating table status:", error);
       res.status(500).json({ error: "Failed to update table status" });
+    }
+  });
+
+  // In-memory idempotency cache (simple implementation)
+  const idempotencyCache = new Map<string, any>();
+  const IDEMPOTENCY_TTL = 10 * 60 * 1000; // 10 minutes
+
+  // Colombian Payment Processing - SumaPOS Colombia
+  app.post("/api/payments/complete-colombian", async (req, res) => {
+    try {
+      // Validate request body with Zod schema
+      const validatedPayload = completePaymentColombianSchema.parse(req.body);
+      const { 
+        tableId, 
+        paymentMethod, 
+        subtotal,
+        impoconsumo,
+        tip = 0, 
+        discount = 0,
+        discountType = 'percentage',
+        cashReceived,
+        change,
+        datafonoTransactionId,
+        datafonoType,
+        qrReference
+      } = validatedPayload;
+
+      // Generate idempotency key and check cache
+      const idempotencyKey = `payment_${tableId}_${paymentMethod}_${Date.now()}_${randomUUID().slice(0, 8)}`;
+      const cacheKey = `${tableId}_${paymentMethod}_${JSON.stringify({ tip, discount, cashReceived, datafonoTransactionId, qrReference })}`;
+      
+      // Check for duplicate request
+      const cachedResponse = idempotencyCache.get(cacheKey);
+      if (cachedResponse) {
+        console.log(`Idempotent request detected for table ${tableId}, returning cached response`);
+        return res.json(cachedResponse);
+      }
+
+      // Get order items for authoritative calculation
+      const orderItems = await storage.getOrderItems(tableId);
+      if (orderItems.length === 0) {
+        return res.status(400).json({ error: "No order items found for this table" });
+      }
+
+      // Calculate authoritative server-side subtotal
+      let serverSubtotal = 0;
+      const enhancedOrderItems = [];
+      for (const item of orderItems) {
+        const product = await storage.getProduct(item.productId);
+        if (product) {
+          const itemSubtotal = item.quantity * parseFloat(product.price);
+          serverSubtotal += itemSubtotal;
+          enhancedOrderItems.push({
+            ...item,
+            product,
+            subtotal: itemSubtotal
+          });
+        }
+      }
+
+      // Generate temporary employee ID for admin (TODO: Get from auth context in future)
+      const tempEmployeeId = randomUUID(); 
+      
+      // Prepare Colombian payment data for PaymentService validation
+      const paymentData: ColombianPaymentData = {
+        tableId,
+        employeeId: tempEmployeeId,
+        paymentMethod: paymentMethod as any,
+        subtotal: serverSubtotal,
+        tip,
+        discount,
+        discountType,
+        cashReceived,
+        datafonoTransactionId,
+        datafonoType,
+        qrReference
+      };
+
+      // Validate and process payment using PaymentService
+      let processedPayment;
+      try {
+        processedPayment = PaymentService.processColombianPayment(paymentData);
+      } catch (validationError) {
+        console.error('Colombian payment validation failed:', validationError);
+        return res.status(400).json({ 
+          error: validationError instanceof Error ? validationError.message : "Payment validation failed" 
+        });
+      }
+
+      const { payment, calculation } = processedPayment;
+
+      // Generate idempotency key for payment
+      const idempotencyKey = `payment_${tableId}_${Date.now()}_${randomUUID().slice(0, 8)}`;
+
+      // Trigger Colombian payment workflow via n8n with idempotency
+      const n8nClient = getN8nClient();
+      const paymentWorkflowResponse = await n8nClient.processColombianPayment({
+        tableId,
+        employeeId: tempEmployeeId,
+        paymentMethod,
+        amount: calculation.finalTotal,
+        subtotal: calculation.subtotal,
+        impoconsumo: calculation.impoconsumo,
+        tip: calculation.tip,
+        items: enhancedOrderItems,
+        idempotencyKey // Pass to n8n for workflow-level idempotency
+      });
+
+      if (!paymentWorkflowResponse.success) {
+        console.error('N8N payment workflow failed:', paymentWorkflowResponse.error);
+        return res.status(500).json({ 
+          error: "Payment processing failed", 
+          details: paymentWorkflowResponse.error 
+        });
+      }
+
+      // Create Payment record (basic implementation)
+      const paymentId = paymentWorkflowResponse.executionId || randomUUID();
+      const createdPayment = {
+        ...payment,
+        id: paymentId,
+        createdAt: new Date().toISOString()
+      };
+      
+      console.log('Payment record created:', createdPayment);
+
+      // Generate and create Invoice record
+      const invoiceNumber = `COL-${Date.now()}-${tableId}`;
+      const invoice = PaymentService.generateBasicInvoice(
+        createdPayment as any,
+        invoiceNumber
+      );
+
+      const createdInvoice = {
+        ...invoice,
+        id: randomUUID(),
+        createdAt: new Date().toISOString()
+      };
+      
+      console.log('Invoice record created:', createdInvoice);
+
+      // Trigger DIAN invoice generation workflow
+      const invoiceWorkflowResponse = await n8nClient.generateDianInvoice({
+        paymentId: paymentId,
+        invoiceNumber,
+        nit: process.env.RESTAURANT_NIT || "900123456-1",
+        clientName: "CONSUMIDOR FINAL",
+        subtotal: calculation.subtotal,
+        impoconsumo: calculation.impoconsumo,
+        totalAmount: calculation.finalTotal
+      });
+
+      if (!invoiceWorkflowResponse.success) {
+        console.warn('DIAN invoice generation failed (non-fatal):', invoiceWorkflowResponse.error);
+        // Continue - invoice generation failure doesn't block payment
+      }
+
+      // Trigger analytics calculation workflow
+      await n8nClient.calculateAnalytics({
+        date: new Date().toISOString().split('T')[0],
+        restaurantId: process.env.RESTAURANT_ID || 'sumapos-colombia',
+        includeEmployeeMetrics: false,
+        includePeakHours: false
+      });
+
+      // Payment completed successfully - clear order items and free table
+      await storage.clearOrderItems(tableId);
+      await storage.updateTableStatus(tableId, "available");
+
+      // Log successful Colombian payment
+      console.log(`Colombian payment completed for table ${tableId}:`, {
+        paymentMethod,
+        finalTotal: calculation.finalTotal,
+        impoconsumo: calculation.impoconsumo,
+        change: calculation.change,
+        tip: calculation.tip,
+        discount: calculation.discount,
+        invoiceNumber,
+        n8nExecutionId: paymentWorkflowResponse.executionId,
+        idempotencyKey,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Construct final response
+      const responseData = {
+        success: true,
+        message: "¡Pago colombiano completado exitosamente!",
+        data: {
+          tableId,
+          paymentMethod,
+          paymentMethodName: PaymentService.getPaymentMethodDescription(paymentMethod as any),
+          amount: PaymentService.formatColombianPrice(calculation.finalTotal),
+          calculation: {
+            subtotal: PaymentService.formatColombianPrice(calculation.subtotal),
+            impoconsumo: PaymentService.formatColombianPrice(calculation.impoconsumo),
+            tip: PaymentService.formatColombianPrice(calculation.tip),
+            discount: PaymentService.formatColombianPrice(calculation.discount),
+            finalTotal: PaymentService.formatColombianPrice(calculation.finalTotal),
+            change: calculation.change ? PaymentService.formatColombianPrice(calculation.change) : undefined
+          },
+          invoice: {
+            id: createdInvoice.id,
+            number: invoiceNumber,
+            cufe: createdInvoice.cufe,
+            status: invoiceWorkflowResponse.success ? 'generated' : 'pending'
+          },
+          payment: {
+            id: paymentId,
+            createdAt: createdPayment.createdAt
+          },
+          workflows: {
+            payment: paymentWorkflowResponse.executionId,
+            invoice: invoiceWorkflowResponse.executionId
+          },
+          idempotencyKey
+        }
+      };
+
+      // Cache the response with TTL cleanup
+      idempotencyCache.set(cacheKey, responseData);
+      setTimeout(() => {
+        idempotencyCache.delete(cacheKey);
+      }, IDEMPOTENCY_TTL);
+
+      res.json(responseData);
+    } catch (error) {
+      console.error('Error processing Colombian payment:', error);
+      res.status(500).json({ 
+        error: 'Error interno procesando pago colombiano', 
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 
