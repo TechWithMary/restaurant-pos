@@ -1,21 +1,32 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Users, DollarSign, Receipt, CreditCard, Loader2 } from "lucide-react";
+import { ArrowLeft, Users, Receipt, CreditCard, Loader2, Trash2, Edit3 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import PaymentModal from "@/components/PaymentModal";
 import type { OrderItemWithProduct, Table } from "@shared/schema";
+
+// Initialize Stripe
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY!);
 
 export default function OrderManagement() {
   const [, setLocation] = useLocation();
   const params = useParams();
   const { auth } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const tableId = params.tableId ? parseInt(params.tableId) : null;
   const mesaId = auth.mesa_id || tableId;
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   // Redirect if not authenticated or not cashier
   useEffect(() => {
@@ -55,10 +66,100 @@ export default function OrderManagement() {
     enabled: !!mesaId,
   });
 
+  // Delete order item mutation
+  const deleteOrderItemMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      return await apiRequest('DELETE', `/api/order-items/${itemId}?mesa_id=${mesaId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
+      toast({
+        title: "Producto eliminado",
+        description: "El producto se eliminó del pedido",
+      });
+    },
+    onError: (error) => {
+      console.error('Delete item error:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el producto",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Calculate totals
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
   const tax = subtotal * 0.1; // 10% tax
   const total = subtotal + tax;
+
+  const handleDeleteItem = (itemId: string) => {
+    deleteOrderItemMutation.mutate(itemId);
+  };
+
+  const handlePrintReceipt = () => {
+    // Create a printable receipt
+    const receiptContent = `
+      <div style="max-width: 300px; margin: 0 auto; font-family: monospace; padding: 20px;">
+        <h2 style="text-align: center; margin-bottom: 20px;">RESTAURANTE POS</h2>
+        <p style="text-align: center; margin-bottom: 20px;">Mesa ${tableId}</p>
+        <hr>
+        ${orderItems.map(item => `
+          <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+            <span>${item.product.name} x${item.quantity}</span>
+            <span>${formatPrice(item.subtotal)}</span>
+          </div>
+        `).join('')}
+        <hr>
+        <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+          <span>Subtotal:</span>
+          <span>${formatPrice(subtotal)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+          <span>IVA (10%):</span>
+          <span>${formatPrice(tax)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 10px 0; font-weight: bold; font-size: 1.2em;">
+          <span>TOTAL:</span>
+          <span>${formatPrice(total)}</span>
+        </div>
+        <hr>
+        <p style="text-align: center; margin-top: 20px; font-size: 0.8em;">
+          Fecha: ${new Date().toLocaleDateString('es-ES')}<br>
+          Hora: ${new Date().toLocaleTimeString('es-ES')}<br>
+          Cajero: ${auth.mesero_id}
+        </p>
+      </div>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Factura Mesa ${tableId}</title>
+            <style>
+              body { margin: 0; padding: 0; }
+              @media print {
+                body { margin: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            ${receiptContent}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+      printWindow.close();
+    }
+  };
+
+  const handlePaymentComplete = () => {
+    setIsPaymentModalOpen(false);
+    setLocation('/table-map');
+  };
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('es-ES', {
@@ -157,7 +258,7 @@ export default function OrderManagement() {
                   {orderItems.map((item) => (
                     <div 
                       key={item.id} 
-                      className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
+                      className="flex items-center justify-between p-4 bg-muted/50 rounded-lg group"
                       data-testid={`order-item-${item.id}`}
                     >
                       <div className="flex-1">
@@ -178,6 +279,18 @@ export default function OrderManagement() {
                         <p className="text-xl font-bold text-primary">
                           {formatPrice(item.subtotal)}
                         </p>
+                      </div>
+                      <div className="ml-4">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteItem(item.id)}
+                          disabled={deleteOrderItemMutation.isPending}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700"
+                          data-testid={`delete-item-${item.id}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -212,6 +325,7 @@ export default function OrderManagement() {
             <Button 
               size="lg" 
               variant="outline"
+              onClick={handlePrintReceipt}
               className="h-16 text-lg hover-elevate active-elevate-2"
               data-testid="button-print-receipt"
             >
@@ -220,6 +334,7 @@ export default function OrderManagement() {
             </Button>
             <Button 
               size="lg"
+              onClick={() => setIsPaymentModalOpen(true)}
               className="h-16 text-lg hover-elevate active-elevate-2"
               data-testid="button-finalize-payment"
             >
@@ -228,6 +343,20 @@ export default function OrderManagement() {
             </Button>
           </div>
         )}
+
+        {/* Payment Modal */}
+        <Elements stripe={stripePromise}>
+          <PaymentModal
+            isOpen={isPaymentModalOpen}
+            onClose={() => setIsPaymentModalOpen(false)}
+            tableId={tableId!}
+            orderItems={orderItems}
+            subtotal={subtotal}
+            tax={tax}
+            total={total}
+            onPaymentComplete={handlePaymentComplete}
+          />
+        </Elements>
       </div>
     </div>
   );

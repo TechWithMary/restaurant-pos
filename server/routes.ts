@@ -1,7 +1,15 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import Stripe from "stripe";
 import { storage } from "./storage";
 import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, insertTableSchema, sendToKitchenSchema } from "@shared/schema";
+
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2023-10-16",
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Categories API
@@ -538,6 +546,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(500).json({ 
         error: errorMessage
+      });
+    }
+  });
+
+  // Stripe payment endpoint
+  app.post("/api/create-payment-intent", async (req, res) => {
+    try {
+      const { amount, tableNumber, orderItems } = req.body;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+      
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: "eur",
+        metadata: {
+          tableNumber: tableNumber?.toString() || '',
+          orderCount: orderItems?.length?.toString() || '0'
+        }
+      });
+      
+      res.json({ 
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id
+      });
+    } catch (error: any) {
+      console.error("Error creating payment intent:", error);
+      res.status(500).json({ 
+        error: "Error creating payment intent: " + error.message 
+      });
+    }
+  });
+
+  // Complete payment and clear table
+  app.post("/api/complete-payment", async (req, res) => {
+    try {
+      const { tableId, paymentMethod, paymentIntentId, tip = 0 } = req.body;
+      
+      if (!tableId) {
+        return res.status(400).json({ error: "Table ID is required" });
+      }
+
+      // Clear order items for this table
+      await storage.clearOrderItems(parseInt(tableId));
+      
+      // Set table status to available
+      await storage.updateTableStatus(parseInt(tableId), "available");
+      
+      res.json({ 
+        success: true, 
+        message: "Pago completado y mesa liberada",
+        tableId,
+        paymentMethod,
+        tip
+      });
+    } catch (error: any) {
+      console.error("Error completing payment:", error);
+      res.status(500).json({ 
+        error: "Error completing payment: " + error.message 
       });
     }
   });
