@@ -11,7 +11,7 @@ if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2025-08-27.basil",
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -296,8 +296,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(response.status).json({ success: false, error: errorMessage });
       }
 
-      // If successful, clear the order and update table status to "occupied"
-      await storage.clearOrderItems(mesa_id);
+      // If successful, update table status to "occupied" but keep order items for billing
+      // Note: Order items will be cleared after payment is completed, not after sending to kitchen
       
       // Actualizar el estado de la mesa a "occupied" después de enviar el pedido
       try {
