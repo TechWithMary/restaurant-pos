@@ -38,12 +38,11 @@ export default function TableMap() {
   const handleTableClick = (tableNumber: number, status: string) => {
     console.log(`Table ${tableNumber} clicked with status:`, status);
     if (status === "available") {
-      // Solo meseros pueden seleccionar mesas disponibles
-      if (auth.role !== "cajero") {
-        setSelectedTable(tableNumber);
-        setNumberOfPeople("");
-        setIsModalOpen(true);
-      }
+      // TANTO meseros como cajeros pueden tomar pedidos en mesas disponibles
+      // Cajeros para pedidos directos (takeaway, delivery, etc.)
+      setSelectedTable(tableNumber);
+      setNumberOfPeople("");
+      setIsModalOpen(true);
     } else if (status === "occupied") {
       if (auth.role === "cajero") {
         // Cajero va a gestión de pedido
