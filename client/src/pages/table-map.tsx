@@ -59,9 +59,22 @@ export default function TableMap() {
     }
   };
 
-  const handleConfirmTable = () => {
+  const handleConfirmTable = async () => {
     if (selectedTable && numberOfPeople && parseInt(numberOfPeople) > 0) {
       console.log(`Confirming table ${selectedTable} with ${numberOfPeople} people`);
+      
+      // CRITICAL: Mark table as occupied immediately when waiter starts order
+      try {
+        await updateTableStatusMutation.mutateAsync({ 
+          tableId: selectedTable, 
+          status: "occupied" 
+        });
+        console.log(`Table ${selectedTable} marked as occupied - cashier will see it immediately`);
+      } catch (error) {
+        console.error('Failed to mark table as occupied:', error);
+        // Continue anyway - don't block the flow
+      }
+      
       selectTable(selectedTable, parseInt(numberOfPeople));
       setLocation(`/order/${selectedTable}`);
       setIsModalOpen(false);
@@ -107,7 +120,7 @@ export default function TableMap() {
     }
   };
 
-  // Fetch tables from API
+  // Fetch tables from API with auto-refresh for cashier real-time updates
   const { data: tables = [], isLoading: tablesLoading, error: tablesError } = useQuery<Table[]>({
     queryKey: ['/api/tables'],
     queryFn: async () => {
@@ -118,6 +131,9 @@ export default function TableMap() {
       console.log('Tables fetched from API:', data);
       return data;
     },
+    // Auto-refresh every 10 seconds for cashier real-time updates
+    refetchInterval: 10000,
+    refetchIntervalInBackground: true,
   });
 
   const getStatusColor = (status: string) => {

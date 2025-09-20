@@ -127,12 +127,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Product not found" });
       }
       
+      // SERVER-SIDE SAFEGUARD: Check if this is first item for the table
+      const existingItems = await storage.getOrderItems(orderItemData.mesaId);
+      const isFirstItem = existingItems.length === 0;
+      let tableStatusChanged = false;
+      
+      // If first item, automatically mark table as occupied
+      if (isFirstItem) {
+        try {
+          const table = await storage.getTable(orderItemData.mesaId);
+          if (table && table.status === "available") {
+            await storage.updateTableStatus(orderItemData.mesaId, "occupied");
+            tableStatusChanged = true;
+            console.log(`SERVER-SIDE: Table ${orderItemData.mesaId} automatically marked as occupied on first order item`);
+          }
+        } catch (error) {
+          console.error(`Failed to auto-update table ${orderItemData.mesaId} status:`, error);
+          // Don't fail the order creation if table status update fails
+        }
+      }
+      
       const orderItem = await storage.createOrderItem(orderItemData);
       
       const orderItemWithProduct = {
         ...orderItem,
         product,
         subtotal: orderItem.quantity * parseFloat(product.price),
+        // Include hint for frontend to invalidate tables cache if needed
+        tableStatusChanged,
       };
       
       res.status(201).json(orderItemWithProduct);

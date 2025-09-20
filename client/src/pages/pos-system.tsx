@@ -79,7 +79,7 @@ export default function POSSystem() {
     enabled: !!mesaId, // Solo ejecutar cuando tengamos un mesa_id válido
   });
 
-  // Add item to order mutation
+  // Add item to order mutation with conditional table invalidation
   const addItemMutation = useMutation({
     mutationFn: async (productId: string) => {
       console.log('Adding item to mesa_id:', mesaId);
@@ -91,8 +91,15 @@ export default function POSSystem() {
       if (!response.ok) throw new Error('Failed to add item');
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Always invalidate order items
       queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
+      
+      // CRITICAL: If server marked table as occupied on first item, update cashier immediately
+      if (data.tableStatusChanged) {
+        queryClient.invalidateQueries({ queryKey: ['/api/tables'] });
+        console.log(`FIRST ITEM: Table ${mesaId} marked as occupied - cashier cache invalidated`);
+      }
     },
   });
 
@@ -162,7 +169,11 @@ export default function POSSystem() {
     },
     onSuccess: () => {
       console.log('Order sent successfully, clearing items for mesa_id:', mesaId);
+      // Invalidate order items for this table
       queryClient.invalidateQueries({ queryKey: ['/api/order-items', mesaId] });
+      // CRITICAL: Invalidate tables to update status from "available" to "occupied" in cashier screen
+      queryClient.invalidateQueries({ queryKey: ['/api/tables'] });
+      console.log('Cache invalidated for order items and tables - cashier screen should update automatically');
     },
   });
 

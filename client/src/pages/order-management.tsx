@@ -52,7 +52,7 @@ export default function OrderManagement() {
     enabled: !!tableId,
   });
 
-  // Fetch existing order items for this table
+  // Fetch existing order items for this table with auto-refresh for real-time updates
   const { data: orderItems = [], isLoading: orderItemsLoading } = useQuery<OrderItemWithProduct[]>({
     queryKey: ['/api/order-items', mesaId],
     queryFn: async () => {
@@ -64,6 +64,9 @@ export default function OrderManagement() {
       return data;
     },
     enabled: !!mesaId,
+    // Auto-refresh every 15 seconds for real-time order updates
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
   });
 
   // Delete order item mutation
