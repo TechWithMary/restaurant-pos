@@ -407,7 +407,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         discount = 0,
         discountType = 'percentage',
         cashReceived,
-        change,
         datafonoTransactionId,
         datafonoType,
         qrReference
@@ -477,8 +476,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { payment, calculation } = processedPayment;
 
-      // Generate idempotency key for payment
-      const idempotencyKey = `payment_${tableId}_${Date.now()}_${randomUUID().slice(0, 8)}`;
+      // Use the same idempotency key for consistency
 
       // Trigger Colombian payment workflow via n8n with idempotency
       const n8nClient = getN8nClient();
@@ -490,8 +488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         subtotal: calculation.subtotal,
         impoconsumo: calculation.impoconsumo,
         tip: calculation.tip,
-        items: enhancedOrderItems,
-        idempotencyKey // Pass to n8n for workflow-level idempotency
+        items: enhancedOrderItems
       });
 
       if (!paymentWorkflowResponse.success) {
