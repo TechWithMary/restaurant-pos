@@ -33,7 +33,15 @@ interface PaymentModalProps {
   subtotal: number;
   tax: number;
   total: number;
-  onPaymentComplete: () => void;
+  onPaymentComplete: (paymentData: {
+    items: OrderItemWithProduct[];
+    subtotal: number;
+    tax: number;
+    total: number;
+    paymentMethod: string;
+    timestamp: string;
+    tableId: number;
+  }) => void;
 }
 
 export default function PaymentModal({
@@ -85,14 +93,27 @@ export default function PaymentModal({
     mutationFn: async (paymentData: any) => {
       return await apiRequest('POST', '/api/payments/complete-colombian', paymentData);
     },
-    onSuccess: () => {
+    onSuccess: (response, paymentData) => {
+      // CRITICAL: Pass complete payment data BEFORE invalidation clears cache
+      const completePaymentData = {
+        items: [...orderItems], // Snapshot before clearing
+        subtotal: finalSubtotal,
+        tax: finalImpoconsumo, 
+        total: finalTotal,
+        paymentMethod: paymentData.paymentMethod,
+        timestamp: new Date().toISOString(),
+        tableId: tableId,
+      };
+      
+      onPaymentComplete(completePaymentData);
+      
+      // Clear cache AFTER callback has data
       queryClient.invalidateQueries({ queryKey: ['/api/tables'] });
       queryClient.invalidateQueries({ queryKey: ['/api/order-items', tableId] });
       toast({
         title: "¡Pago completado!",
         description: "Mesa liberada exitosamente - SumaPOS Colombia",
       });
-      onPaymentComplete();
       onClose();
     },
     onError: (error: any) => {

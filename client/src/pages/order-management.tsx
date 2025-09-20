@@ -27,6 +27,16 @@ export default function OrderManagement() {
   const tableId = params.tableId ? parseInt(params.tableId) : null;
   const mesaId = auth.mesa_id || tableId;
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isInvoiceFinalized, setIsInvoiceFinalized] = useState(false);
+  const [finalizedOrderData, setFinalizedOrderData] = useState<{
+    items: OrderItemWithProduct[];
+    subtotal: number;
+    tax: number;
+    total: number;
+    paymentMethod: string;
+    timestamp: string;
+    tableId: number;
+  } | null>(null);
 
   // Redirect if not authenticated or not cashier
   useEffect(() => {
@@ -159,8 +169,119 @@ export default function OrderManagement() {
     }
   };
 
-  const handlePaymentComplete = () => {
+  const handlePaymentComplete = (paymentData: {
+    items: OrderItemWithProduct[];
+    subtotal: number;
+    tax: number;
+    total: number;
+    paymentMethod: string;
+    timestamp: string;
+    tableId: number;
+  }) => {
+    // FIXED: Use received data from PaymentModal (no race condition)
+    setFinalizedOrderData(paymentData);
     setIsPaymentModalOpen(false);
+    setIsInvoiceFinalized(true); // Mostrar pantalla de finalización
+  };
+
+  // Re-imprimir factura con datos finalizados
+  const handleReprintInvoice = () => {
+    if (!finalizedOrderData) return;
+    
+    const receiptContent = `
+      <div style="max-width: 300px; margin: 0 auto; font-family: monospace; padding: 20px;">
+        <h2 style="text-align: center; margin-bottom: 20px;">SumaPOS Colombia</h2>
+        <p style="text-align: center; margin-bottom: 20px;">Mesa ${tableId}</p>
+        <p style="text-align: center; margin-bottom: 10px;"><strong>*** FACTURA FINALIZADA ***</strong></p>
+        <hr>
+        ${finalizedOrderData.items.map(item => `
+          <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+            <span>${item.product.name} x${item.quantity}</span>
+            <span>${formatPrice(item.subtotal)}</span>
+          </div>
+        `).join('')}
+        <hr>
+        <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+          <span>Subtotal:</span>
+          <span>${formatPrice(finalizedOrderData.subtotal)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+          <span>Impoconsumo (8%):</span>
+          <span>${formatPrice(finalizedOrderData.tax)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin: 10px 0; font-weight: bold; font-size: 1.2em;">
+          <span>TOTAL PAGADO:</span>
+          <span>${formatPrice(finalizedOrderData.total)}</span>
+        </div>
+        <hr>
+        <p style="text-align: center; margin: 10px 0;">
+          <strong>Método de Pago: ${finalizedOrderData.paymentMethod}</strong>
+        </p>
+        <p style="text-align: center; margin-top: 20px; font-size: 0.8em;">
+          Fecha: ${new Date(finalizedOrderData.timestamp).toLocaleDateString('es-CO')}<br>
+          Hora: ${new Date(finalizedOrderData.timestamp).toLocaleTimeString('es-CO')}<br>
+          Cajero: ${auth.mesero_id}<br>
+          Estado: FACTURA CERRADA
+        </p>
+      </div>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Factura Finalizada Mesa ${tableId}</title>
+            <style>
+              body { margin: 0; padding: 0; }
+              @media print {
+                body { margin: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            ${receiptContent}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+      printWindow.close();
+    }
+  };
+
+  // Enviar factura DIAN usando n8n
+  const handleSendDianInvoice = async () => {
+    if (!finalizedOrderData) return;
+    
+    try {
+      const response = await apiRequest('POST', '/api/n8n/send-dian-invoice', {
+        mesa_id: tableId,
+        cajero_id: auth.mesero_id,
+        items: finalizedOrderData.items,
+        total: finalizedOrderData.total,
+        paymentMethod: finalizedOrderData.paymentMethod,
+        timestamp: finalizedOrderData.timestamp,
+      });
+
+      toast({
+        title: "Factura DIAN Enviada",
+        description: "La factura electrónica ha sido enviada a DIAN exitosamente",
+      });
+    } catch (error) {
+      console.error('Error sending DIAN invoice:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo enviar la factura a DIAN. Intente nuevamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Cerrar definitivamente y volver al mapa
+  const handleFinalizeAndClose = () => {
+    setIsInvoiceFinalized(false);
+    setFinalizedOrderData(null);
     setLocation('/table-map');
   };
 
@@ -360,6 +481,116 @@ export default function OrderManagement() {
             onPaymentComplete={handlePaymentComplete}
           />
         </Elements>
+
+        {/* PANTALLA DE FINALIZACIÓN DE FACTURA */}
+        {isInvoiceFinalized && finalizedOrderData && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <CardHeader className="text-center bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-t-lg">
+                <CardTitle className="text-2xl font-bold flex items-center justify-center gap-3">
+                  <Receipt className="w-8 h-8" />
+                  ¡Factura Finalizada Exitosamente!
+                </CardTitle>
+                <p className="text-green-100 mt-2">Mesa {tableId} - Pago Completado</p>
+              </CardHeader>
+              
+              <CardContent className="p-6">
+                {/* Resumen del pedido */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold mb-4 text-primary">Resumen del Pedido</h3>
+                  <div className="space-y-2">
+                    {finalizedOrderData.items.map((item, index) => (
+                      <div key={index} className="flex justify-between items-center py-2 border-b border-muted">
+                        <span className="font-medium">{item.product.name} x{item.quantity}</span>
+                        <span className="font-semibold">{formatPrice(item.subtotal)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-4 space-y-2">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Subtotal:</span>
+                      <span>{formatPrice(finalizedOrderData.subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Impoconsumo (8%):</span>
+                      <span>{formatPrice(finalizedOrderData.tax)}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between text-xl font-bold text-primary">
+                      <span>TOTAL PAGADO:</span>
+                      <span>{formatPrice(finalizedOrderData.total)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Información del pago */}
+                <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+                  <h4 className="font-semibold mb-2">Detalles del Pago</h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Método:</span>
+                      <p className="font-medium">{finalizedOrderData.paymentMethod}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Cajero:</span>
+                      <p className="font-medium">ID {auth.mesero_id}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Fecha:</span>
+                      <p className="font-medium">{new Date(finalizedOrderData.timestamp).toLocaleDateString('es-CO')}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Hora:</span>
+                      <p className="font-medium">{new Date(finalizedOrderData.timestamp).toLocaleTimeString('es-CO')}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones de acción */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={handleReprintInvoice}
+                    className="h-14 hover-elevate active-elevate-2"
+                    data-testid="button-reprint-invoice"
+                  >
+                    <Receipt className="w-5 h-5 mr-2" />
+                    Re-imprimir Factura
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    variant="secondary"
+                    onClick={handleSendDianInvoice}
+                    className="h-14 hover-elevate active-elevate-2"
+                    data-testid="button-send-dian"
+                  >
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    Enviar a DIAN
+                  </Button>
+                  
+                  <Button
+                    size="lg"
+                    onClick={handleFinalizeAndClose}
+                    className="h-14 hover-elevate active-elevate-2 bg-green-600 hover:bg-green-700"
+                    data-testid="button-finalize-close"
+                  >
+                    <ArrowLeft className="w-5 h-5 mr-2" />
+                    Cerrar y Continuar
+                  </Button>
+                </div>
+
+                <div className="mt-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    La mesa ha sido liberada automáticamente y está disponible para nuevos clientes.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
