@@ -550,8 +550,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('Invoice record created:', createdInvoice);
 
       // Trigger DIAN invoice generation workflow (optional)
+      let invoiceWorkflowResponse: any = { success: false, executionId: null };
       try {
-        const invoiceWorkflowResponse = await n8nClient.generateDianInvoice({
+        invoiceWorkflowResponse = await n8nClient.generateDianInvoice({
           paymentId: paymentId,
           invoiceNumber,
           nit: process.env.RESTAURANT_NIT || "900123456-1",
