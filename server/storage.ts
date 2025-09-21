@@ -4,10 +4,14 @@ import {
   type OrderItem, 
   type OrderItemWithProduct,
   type Table,
+  type Payment,
+  type Invoice,
   type InsertCategory,
   type InsertProduct,
   type InsertOrderItem,
-  type InsertTable
+  type InsertTable,
+  type InsertPayment,
+  type InsertInvoice
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -34,6 +38,17 @@ export interface IStorage {
   getTable(id: number): Promise<Table | undefined>;
   updateTableStatus(id: number, status: string): Promise<Table | undefined>;
   createTable(table: InsertTable): Promise<Table>;
+  
+  // Colombian Payments - For Cash Register Closing
+  createPayment(payment: InsertPayment): Promise<Payment>;
+  getPayment(id: string): Promise<Payment | undefined>;
+  getPaymentsByDate(date: string): Promise<Payment[]>;
+  getPaymentsByDateRange(startDate: string, endDate: string): Promise<Payment[]>;
+  
+  // Colombian Invoices - For DIAN compliance
+  createInvoice(invoice: InsertInvoice): Promise<Invoice>;
+  getInvoice(id: string): Promise<Invoice | undefined>;
+  getInvoiceByPaymentId(paymentId: string): Promise<Invoice | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -194,6 +209,6 @@ export class MemStorage implements IStorage {
   }
 }
 
-import { N8nStorage } from "./n8n-storage";
+import { DatabaseStorage } from "./database-storage";
 
-export const storage = new N8nStorage();
+export const storage = new DatabaseStorage();

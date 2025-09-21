@@ -524,42 +524,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
         paymentWorkflowResponse = { success: true, executionId: null }; // Continue without n8n
       }
 
-      // Create Payment record (basic implementation)
-      const paymentId = paymentWorkflowResponse.executionId || randomUUID();
-      const createdPayment = {
-        ...payment,
-        id: paymentId,
-        createdAt: new Date().toISOString()
-      };
+      // Save Payment to PostgreSQL Database - FOR CASH REGISTER CLOSING
+      const createdPayment = await storage.createPayment({
+        tableId,
+        employeeId: tempEmployeeId,
+        paymentMethod: payment.paymentMethod,
+        amount: payment.amount,
+        subtotal: payment.subtotal,
+        impoconsumo: payment.impoconsumo,
+        tip: payment.tip,
+        discount: payment.discount,
+        discountType: payment.discountType,
+        datafonoTransactionId: payment.datafonoTransactionId,
+        datafonoType: payment.datafonoType,
+        qrReference: payment.qrReference,
+        cashReceived: payment.cashReceived,
+        change: payment.change
+      });
       
-      console.log('Payment record created:', createdPayment);
+      console.log('🟢 Payment saved to PostgreSQL for cash register closing:', createdPayment.id);
 
-      // Generate and create Invoice record
+      // Generate and save Invoice to PostgreSQL Database - FOR DIAN COMPLIANCE
       const invoiceNumber = `COL-${Date.now()}-${tableId}`;
-      const invoice = PaymentService.generateBasicInvoice(
-        createdPayment as any,
-        invoiceNumber
-      );
-
-      const createdInvoice = {
-        ...invoice,
-        id: randomUUID(),
-        createdAt: new Date().toISOString()
-      };
+      const createdInvoice = await storage.createInvoice({
+        paymentId: createdPayment.id,
+        invoiceNumber,
+        cufe: `CUFE-${randomUUID().replace(/-/g, '').toUpperCase()}`,
+        nit: process.env.RESTAURANT_NIT || "900123456-1",
+        clientName: "CONSUMIDOR FINAL",
+        subtotal: calculation.subtotal,
+        impoconsumo: calculation.impoconsumo,
+        totalAmount: calculation.finalTotal
+      });
       
-      console.log('Invoice record created:', createdInvoice);
+      console.log('🟢 Invoice saved to PostgreSQL for DIAN compliance:', createdInvoice.id);
 
       // Trigger DIAN invoice generation workflow (optional)
       let invoiceWorkflowResponse: any = { success: false, executionId: null };
       try {
         invoiceWorkflowResponse = await n8nClient.generateDianInvoice({
-          paymentId: paymentId,
+          paymentId: createdPayment.id,
           invoiceNumber,
           nit: process.env.RESTAURANT_NIT || "900123456-1",
           clientName: "CONSUMIDOR FINAL",
-          subtotal: calculation.subtotal,
-          impoconsumo: calculation.impoconsumo,
-          totalAmount: calculation.finalTotal
+          subtotal: calculation.subtotal.toString(),
+          impoconsumo: calculation.impoconsumo.toString(),
+          totalAmount: calculation.finalTotal.toString()
         });
 
         if (!invoiceWorkflowResponse.success) {
@@ -648,6 +658,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error processing Colombian payment:', error);
       res.status(500).json({ 
         error: 'Error interno procesando pago colombiano', 
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // ========== CASH REGISTER CLOSING - Get payments for date ==========
+  app.get("/api/payments/:date", async (req, res) => {
+    try {
+      const { date } = req.params; // Format: YYYY-MM-DD
+      
+      console.log(`Getting payments for cash register closing on date: ${date}`);
+      
+      const payments = await storage.getPaymentsByDate(date);
+      
+      // Calculate totals for cash register closing
+      const totals = {
+        totalSales: 0,
+        totalImpoconsumo: 0,
+        totalTips: 0,
+        cashSales: 0,
+        datafonoSales: 0,
+        qrSales: 0,
+        paymentsCount: payments.length
+      };
+      
+      payments.forEach(payment => {
+        totals.totalSales += Number(payment.amount);
+        totals.totalImpoconsumo += Number(payment.impoconsumo);
+        totals.totalTips += Number(payment.tip);
+        
+        if (payment.paymentMethod === 'efectivo') {
+          totals.cashSales += Number(payment.amount);
+        } else if (payment.paymentMethod.startsWith('datafono_')) {
+          totals.datafonoSales += Number(payment.amount);
+        } else if (payment.paymentMethod === 'qr_bancolombia') {
+          totals.qrSales += Number(payment.amount);
+        }
+      });
+      
+      res.json({
+        success: true,
+        date,
+        payments,
+        totals,
+        message: `Found ${payments.length} payments for ${date}`
+      });
+      
+    } catch (error) {
+      console.error('Error getting payments for cash register:', error);
+      res.status(500).json({ 
+        error: 'Error getting payments for cash register',
         message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
