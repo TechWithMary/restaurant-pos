@@ -128,8 +128,8 @@ export default function PaymentModal({
     }
   });
 
-  // Employee ID para pagos - usando UUID fijo para cajero en desarrollo
-  const employeeId = auth.mesero_id ? `cajero-${auth.mesero_id}-uuid` : "cajero-1-uuid";
+  // Employee ID para pagos - usando UUID real para cajero
+  const employeeId = auth.mesero_id ? `550e8400-e29b-41d4-a716-44665544000${auth.mesero_id}` : "550e8400-e29b-41d4-a716-446655440001";
 
   // Handle Colombian Efectivo Payment
   const handleEfectivoPayment = async () => {
