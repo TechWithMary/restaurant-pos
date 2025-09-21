@@ -79,8 +79,9 @@ export const employees = pgTable("employees", {
   document: varchar("document", { length: 20 }).notNull().unique(), // Cédula colombiana
   phone: varchar("phone", { length: 15 }),
   email: varchar("email", { length: 100 }),
-  role: varchar("role", { length: 20 }).notNull().default("mesero"), // mesero, cajero, chef, admin
+  role: varchar("role", { length: 20 }).notNull().default("mesero"), // mesero, cajero, chef, admin, gerente
   salary: decimal("salary", { precision: 10, scale: 2 }),
+  pin: varchar("pin", { length: 4 }), // PIN de 4 dígitos para autenticación
   isActive: boolean("is_active").notNull().default(true),
   startDate: timestamp("start_date").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
