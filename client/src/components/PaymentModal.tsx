@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/contexts/AuthContext";
 import type { OrderItemWithProduct } from "@shared/schema";
 
 // Colombian Payment Methods - SumaPOS Colombia
@@ -55,6 +56,7 @@ export default function PaymentModal({
   onPaymentComplete,
 }: PaymentModalProps) {
   const { toast } = useToast();
+  const { auth } = useAuth();
   const queryClient = useQueryClient();
 
   // Colombian Payment State
@@ -126,6 +128,9 @@ export default function PaymentModal({
     }
   });
 
+  // Employee ID para pagos - usando UUID fijo para cajero en desarrollo
+  const employeeId = auth.mesero_id ? `cajero-${auth.mesero_id}-uuid` : "cajero-1-uuid";
+
   // Handle Colombian Efectivo Payment
   const handleEfectivoPayment = async () => {
     if (parseFloat(cashReceived) < finalTotal) {
@@ -141,14 +146,14 @@ export default function PaymentModal({
     try {
       await completePaymentMutation.mutateAsync({
         tableId,
+        employeeId,
         paymentMethod: "efectivo",
         subtotal: finalSubtotal,
         impoconsumo: finalImpoconsumo,
         tip,
         discount: discountAmount,
         discountType,
-        cashReceived: parseFloat(cashReceived),
-        change: change
+        cashReceived: parseFloat(cashReceived)
       });
     } finally {
       setProcessing(false);
@@ -183,6 +188,7 @@ export default function PaymentModal({
       
       await completePaymentMutation.mutateAsync({
         tableId,
+        employeeId,
         paymentMethod: paymentMethod,
         subtotal: finalSubtotal,
         impoconsumo: finalImpoconsumo,
@@ -222,6 +228,7 @@ export default function PaymentModal({
     try {
       await completePaymentMutation.mutateAsync({
         tableId,
+        employeeId,
         paymentMethod: "qr_bancolombia",
         subtotal: finalSubtotal,
         impoconsumo: finalImpoconsumo,
