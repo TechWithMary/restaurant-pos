@@ -1,0 +1,130 @@
+{
+  "name": "Control de Inventario Inteligente",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2f77bfe6-483c-45d2-8edf-b6ed2485b916",
+      "name": "Monitore Inventario"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  p.id AS producto_id,\n  p.nombre,\n  i.cantidad AS stock_actual,\n  i.stock_minimo,\n  CASE\n    WHEN i.cantidad <= i.stock_minimo THEN 'CRITICO'\n    WHEN i.cantidad <= i.stock_minimo * 1.5 THEN 'BAJO'\n    ELSE 'OK'\n  END AS estado_stock\nFROM inventario i\nJOIN productos p ON p.id = i.producto_id\nWHERE i.cantidad <= i.stock_minimo * 1.5\nORDER BY i.cantidad ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "183f8700-2692-4d7e-9e61-a35bd48141a4",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\n\n// Si no hay productos con stock bajo, no enviar email\nif (!rows.length) {\n  return [];\n}\n\n// Construir tabla HTML\nconst htmlRows = rows.map(r =>\n  `<tr><td>${r.producto_id}</td><td>${r.nombre}</td><td>${r.stock_actual}</td><td>${r.stock_minimo}</td><td>${r.estado_stock}</td></tr>`\n).join('');\n\nconst html = `\n<h3>🚨 Alerta de Stock Bajo</h3>\n<p>Se han detectado productos con stock bajo o crítico:</p>\n<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse: collapse;\">\n<tr style=\"background-color: #f0f0f0;\"><th>ID</th><th>Producto</th><th>Stock Actual</th><th>Stock Mínimo</th><th>Estado</th></tr>\n${htmlRows}\n</table>\n<p><strong>Total de productos afectados: ${rows.length}</strong></p>\n`;\n\n// Construir texto plano\nconst textLines = rows.map(r =>\n  `- ${r.nombre}: ${r.stock_actual}/${r.stock_minimo} (${r.estado_stock})`\n);\n\nreturn [{\n  subject: `🚨 ${rows.length} productos con stock bajo`,\n  text: textLines.join('\\n'),\n  html: html,\n  to: $vars.MANAGEMENT_EMAIL || 'mary@blockflux.co'\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "97c184f9-9d5b-44d9-a5fa-bab54cd6dfb4",
+      "name": "Construir Email"
+    },
+    {
+      "parameters": {
+        "fromEmail": "mary@blockflux.co",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "aeb0b450-2b80-44f2-9002-f3dcde852d8b",
+      "name": "Send email",
+      "webhookId": "758484f9-94bf-47fd-bac7-24f00facf8ac",
+      "credentials": {
+        "smtp": {
+          "id": "DUnRyrIaP0JumMKM",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Monitore Inventario": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Construir Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Email": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "30d5d47f-737d-43e2-bafb-f00df56994e6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "FT1ZZm9XVZFZlbqZ",
+  "tags": []
+}

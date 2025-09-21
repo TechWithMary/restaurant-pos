@@ -1,0 +1,91 @@
+{
+  "name": "API_AdminPanel_KPIs",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api/admin/kpis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "7b0e62ee-6182-42bf-a569-2274805f9635",
+      "name": "Webhook",
+      "webhookId": "89e8887e-acfe-4c86-a216-a28538146b35"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (SELECT COALESCE(SUM(total), 0) FROM pedidos WHERE DATE(created_at) = CURRENT_DATE) as ventas_hoy,\n  (SELECT COUNT(id) FROM turnos WHERE fecha = CURRENT_DATE AND estado = 'activo') as personal_activo,\n  (SELECT COUNT(id) FROM mesas WHERE estado = 'ocupada') as mesas_ocupadas,\n  (SELECT COUNT(id) FROM mesas) as mesas_totales;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        0
+      ],
+      "id": "bc35239f-16f7-4069-9917-41650d6a6b69",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        400,
+        0
+      ],
+      "id": "2ff3d9af-e0b6-4f4a-8a92-b5cad7f63d38",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "12fbb801-a01b-48cf-b020-8765edc722b6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "BOyyU1SqVkPT5Nbv",
+  "tags": []
+}

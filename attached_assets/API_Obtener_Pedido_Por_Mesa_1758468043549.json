@@ -1,0 +1,91 @@
+{
+  "name": "API_Obtener_Pedido_Por_Mesa",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api/pedido/mesa/:mesaId",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        0
+      ],
+      "id": "068bb5ad-ec41-416d-935e-f5b019b4f2db",
+      "name": "GET Pedido por Mesa",
+      "webhookId": "e96b02bc-87c5-4b29-86d1-596ff3d96949"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  p.id as pedido_id,\n  p.estado as estado_pedido,\n  p.total as total_pedido,\n  dp.producto_id,\n  pr.nombre as producto_nombre,\n  dp.cantidad,\n  dp.precio_unitario,\n  dp.subtotal\nFROM pedidos p\nJOIN detalle_pedidos dp ON p.id = dp.pedido_id\nJOIN productos pr ON dp.producto_id = pr.id\nWHERE p.mesa_id = {{ $params.mesaId }} AND p.estado = 'pendiente';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        160,
+        0
+      ],
+      "id": "3472b30d-707f-4fc8-9f8e-b3999f919b7b",
+      "name": "Consultar Detalles en DB",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        400,
+        0
+      ],
+      "id": "cbb810d9-d0b8-4ad8-83f5-61d5ae4f1337",
+      "name": "Responder con Detalles a POS"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GET Pedido por Mesa": {
+      "main": [
+        [
+          {
+            "node": "Consultar Detalles en DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Detalles en DB": {
+      "main": [
+        [
+          {
+            "node": "Responder con Detalles a POS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b7051da6-b32d-451b-a7bc-48d260c97ab4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "yUGrKYvEusCfcNbr",
+  "tags": []
+}

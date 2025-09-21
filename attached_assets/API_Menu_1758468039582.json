@@ -1,0 +1,93 @@
+{
+  "name": "API_Menu",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api/menu",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        0
+      ],
+      "id": "16f97a4d-2198-4368-a258-685cf774a916",
+      "name": "API_Menu",
+      "webhookId": "584ee3e0-b280-4714-8dd3-ca89ccae0be3"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        432,
+        0
+      ],
+      "id": "93b54ebe-5585-4df0-878d-24915f9b4f52",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nombre, descripcion, precio, categoria\nFROM productos\nWHERE disponible = TRUE\nORDER BY categoria, nombre;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        0
+      ],
+      "id": "d31366b4-1324-4a3a-b433-d21063ee8353",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "2FevWKFbE5vwm3ou",
+          "name": "Mi Supabase"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "API_Menu": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "57d8f9c7-6565-49f2-8be5-a7bce9b9cbf2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d74b527686138088569a73c83757ab612a53b10fd16aa355cf80b076bc8a543a"
+  },
+  "id": "qB4fTu7VX4XFSBiA",
+  "tags": []
+}
