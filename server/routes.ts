@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
 import { storage } from "./storage";
-import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, insertTableSchema, sendToKitchenSchema, completePaymentColombianSchema } from "@shared/schema";
+import { insertCategorySchema, insertProductSchema, insertOrderItemSchema, insertTableSchema, insertEmployeeSchema, sendToKitchenSchema, completePaymentColombianSchema } from "@shared/schema";
+import { z } from "zod";
 import { PaymentService, type ColombianPaymentData } from "./payments-service";
 import { getN8nClient } from "./n8n-client";
 import { randomUUID } from "crypto";
@@ -658,6 +659,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error processing Colombian payment:', error);
       res.status(500).json({ 
         error: 'Error interno procesando pago colombiano', 
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // ========== EMPLOYEE MANAGEMENT CRUD ROUTES ==========
+  
+  // Get all employees
+  app.get("/api/employees", async (req, res) => {
+    try {
+      const employees = await storage.getAllEmployees();
+      res.json({
+        success: true,
+        employees,
+        message: `Found ${employees.length} employees`
+      });
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+      res.status(500).json({ 
+        error: 'Error fetching employees',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Get employee by ID  
+  app.get("/api/employees/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const employee = await storage.getEmployee(id);
+      
+      if (!employee) {
+        return res.status(404).json({
+          error: 'Employee not found',
+          message: `Employee with ID ${id} does not exist`
+        });
+      }
+      
+      res.json({
+        success: true,
+        employee,
+        message: 'Employee found'
+      });
+    } catch (error) {
+      console.error('Error fetching employee:', error);
+      res.status(500).json({ 
+        error: 'Error fetching employee',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Create new employee
+  app.post("/api/employees", async (req, res) => {
+    try {
+      // Validate request body using Zod schema
+      const validatedData = insertEmployeeSchema.parse(req.body);
+      
+      // Additional PIN validation (4 digits)
+      if (!/^\d{4}$/.test(validatedData.pin)) {
+        return res.status(400).json({
+          error: 'Invalid PIN format',
+          message: 'PIN must be exactly 4 digits'
+        });
+      }
+      
+      const newEmployee = await storage.createEmployee(validatedData);
+      
+      console.log('🟢 New employee created:', { 
+        id: newEmployee.id, 
+        name: `${validatedData.firstName} ${validatedData.lastName}`,
+        role: validatedData.role 
+      });
+      
+      res.status(201).json({
+        success: true,
+        employee: newEmployee,
+        message: 'Employee created successfully'
+      });
+      
+    } catch (error) {
+      console.error('Error creating employee:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          error: 'Validation error',
+          message: 'Invalid employee data',
+          details: error.errors
+        });
+      }
+      res.status(500).json({ 
+        error: 'Error creating employee',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Update employee
+  app.put("/api/employees/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Check if employee exists
+      const existingEmployee = await storage.getEmployee(id);
+      if (!existingEmployee) {
+        return res.status(404).json({
+          error: 'Employee not found',
+          message: `Employee with ID ${id} does not exist`
+        });
+      }
+      
+      // Validate request body
+      const validatedData = insertEmployeeSchema.partial().parse(req.body);
+      
+      // Additional PIN validation if provided
+      if (validatedData.pin && !/^\d{4}$/.test(validatedData.pin)) {
+        return res.status(400).json({
+          error: 'Invalid PIN format',
+          message: 'PIN must be exactly 4 digits'
+        });
+      }
+      
+      const updatedEmployee = await storage.updateEmployee(id, validatedData);
+      
+      console.log('🟢 Employee updated:', { 
+        id, 
+        changes: Object.keys(validatedData)
+      });
+      
+      res.json({
+        success: true,
+        employee: updatedEmployee,
+        message: 'Employee updated successfully'
+      });
+      
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          error: 'Validation error',
+          message: 'Invalid employee data',
+          details: error.errors
+        });
+      }
+      res.status(500).json({ 
+        error: 'Error updating employee',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // Delete employee (soft delete - set as inactive)
+  app.delete("/api/employees/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Check if employee exists
+      const existingEmployee = await storage.getEmployee(id);
+      if (!existingEmployee) {
+        return res.status(404).json({
+          error: 'Employee not found',
+          message: `Employee with ID ${id} does not exist`
+        });
+      }
+      
+      // Soft delete by setting active to false
+      const updatedEmployee = await storage.updateEmployee(id, { active: false });
+      
+      console.log('🟢 Employee deactivated:', { id, name: `${existingEmployee.firstName} ${existingEmployee.lastName}` });
+      
+      res.json({
+        success: true,
+        employee: updatedEmployee,
+        message: 'Employee deactivated successfully'
+      });
+      
+    } catch (error) {
+      console.error('Error deactivating employee:', error);
+      res.status(500).json({ 
+        error: 'Error deactivating employee',
         message: error instanceof Error ? error.message : 'Unknown error'
       });
     }

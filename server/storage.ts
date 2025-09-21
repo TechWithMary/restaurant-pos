@@ -6,12 +6,14 @@ import {
   type Table,
   type Payment,
   type Invoice,
+  type Employee,
   type InsertCategory,
   type InsertProduct,
   type InsertOrderItem,
   type InsertTable,
   type InsertPayment,
-  type InsertInvoice
+  type InsertInvoice,
+  type InsertEmployee
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -49,6 +51,12 @@ export interface IStorage {
   createInvoice(invoice: InsertInvoice): Promise<Invoice>;
   getInvoice(id: string): Promise<Invoice | undefined>;
   getInvoiceByPaymentId(paymentId: string): Promise<Invoice | undefined>;
+  
+  // Employee Management - For Staff Control
+  getAllEmployees(): Promise<Employee[]>;
+  getEmployee(id: string): Promise<Employee | undefined>;
+  createEmployee(employee: InsertEmployee): Promise<Employee>;
+  updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee | undefined>;
 }
 
 export class MemStorage implements IStorage {

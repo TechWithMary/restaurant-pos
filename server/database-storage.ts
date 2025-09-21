@@ -8,18 +8,21 @@ import {
   tables,
   payments,
   invoices,
+  employees,
   type Category,
   type Product,
   type OrderItem,
   type Table,
   type Payment,
   type Invoice,
+  type Employee,
   type InsertCategory,
   type InsertProduct,
   type InsertOrderItem,
   type InsertTable,
   type InsertPayment,
-  type InsertInvoice
+  type InsertInvoice,
+  type InsertEmployee
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 import { N8nStorage } from "./n8n-storage";
@@ -186,5 +189,59 @@ export class DatabaseStorage implements IStorage {
     
     const result = await this.db.select().from(invoices).where(eq(invoices.paymentId, paymentId));
     return result[0];
+  }
+
+  // ========== POSTGRESQL EMPLOYEES - FOR STAFF MANAGEMENT ==========
+  async getAllEmployees(): Promise<Employee[]> {
+    console.log("DatabaseStorage: Getting all employees from PostgreSQL");
+    
+    const result = await this.db.select().from(employees).orderBy(employees.firstName, employees.lastName);
+    
+    console.log(`DatabaseStorage: Found ${result.length} employees`);
+    return result;
+  }
+
+  async getEmployee(id: string): Promise<Employee | undefined> {
+    console.log("DatabaseStorage: Getting employee by ID:", id);
+    
+    const result = await this.db.select().from(employees).where(eq(employees.id, id));
+    return result[0];
+  }
+
+  async createEmployee(employee: InsertEmployee): Promise<Employee> {
+    console.log("DatabaseStorage: Creating employee in PostgreSQL:", employee);
+    
+    const result = await this.db.insert(employees).values({
+      ...employee,
+      active: true
+    }).returning();
+    
+    const createdEmployee = result[0];
+    console.log("DatabaseStorage: Employee created successfully with ID:", createdEmployee.id);
+    
+    return createdEmployee;
+  }
+
+  async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee | undefined> {
+    console.log("DatabaseStorage: Updating employee:", id, updates);
+    
+    const result = await this.db
+      .update(employees)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(employees.id, id))
+      .returning();
+    
+    if (result.length === 0) {
+      console.log("DatabaseStorage: Employee not found for update:", id);
+      return undefined;
+    }
+    
+    const updatedEmployee = result[0];
+    console.log("DatabaseStorage: Employee updated successfully:", updatedEmployee.id);
+    
+    return updatedEmployee;
   }
 }
