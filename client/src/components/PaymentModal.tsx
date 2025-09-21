@@ -454,35 +454,32 @@ export default function PaymentModal({
               </CardHeader>
               <CardContent>
                 <Tabs value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as ColombianPaymentMethod)}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="efectivo" data-testid="tab-efectivo">
-                      <Banknote className="w-4 h-4 mr-2" />
-                      Efectivo
+                  <TabsList className="grid w-full grid-cols-4 h-auto">
+                    <TabsTrigger value="efectivo" data-testid="tab-efectivo" className="flex flex-col h-16">
+                      <Banknote className="w-4 h-4 mb-1" />
+                      <span className="text-xs">Efectivo</span>
                     </TabsTrigger>
-                    <TabsTrigger value="datafono_debito" data-testid="tab-datafono-debito">
-                      <CreditCard className="w-4 h-4 mr-2" />
-                      Datáfono
+                    <TabsTrigger value="datafono_debito" data-testid="tab-datafono-debito" className="flex flex-col h-16">
+                      <CreditCard className="w-4 h-4 mb-1" />
+                      <span className="text-xs">D. Débito</span>
                     </TabsTrigger>
-                  </TabsList>
-                  
-                  <div className="mt-4 grid grid-cols-2 gap-2">
                     <TabsTrigger 
                       value="datafono_credito" 
-                      className="w-full"
                       data-testid="tab-datafono-credito"
+                      className="flex flex-col h-16"
                     >
-                      <CreditCard className="w-4 h-4 mr-2" />
-                      D. Crédito
+                      <CreditCard className="w-4 h-4 mb-1" />
+                      <span className="text-xs">D. Crédito</span>
                     </TabsTrigger>
                     <TabsTrigger 
                       value="qr_bancolombia" 
-                      className="w-full"
                       data-testid="tab-qr-bancolombia"
+                      className="flex flex-col h-16"
                     >
-                      <QrCode className="w-4 h-4 mr-2" />
-                      QR Banco
+                      <QrCode className="w-4 h-4 mb-1" />
+                      <span className="text-xs">QR Banco</span>
                     </TabsTrigger>
-                  </div>
+                  </TabsList>
 
                   {/* Efectivo Tab */}
                   <TabsContent value="efectivo" className="space-y-4">
