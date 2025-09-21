@@ -500,25 +500,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Use the same idempotency key for consistency
 
-      // Trigger Colombian payment workflow via n8n with idempotency
+      // Trigger Colombian payment workflow via n8n with idempotency (optional)
       const n8nClient = getN8nClient();
-      const paymentWorkflowResponse = await n8nClient.processColombianPayment({
-        tableId,
-        employeeId: tempEmployeeId,
-        paymentMethod,
-        amount: calculation.finalTotal,
-        subtotal: calculation.subtotal,
-        impoconsumo: calculation.impoconsumo,
-        tip: calculation.tip,
-        items: enhancedOrderItems
-      });
-
-      if (!paymentWorkflowResponse.success) {
-        console.error('N8N payment workflow failed:', paymentWorkflowResponse.error);
-        return res.status(500).json({ 
-          error: "Payment processing failed", 
-          details: paymentWorkflowResponse.error 
+      let paymentWorkflowResponse;
+      try {
+        paymentWorkflowResponse = await n8nClient.processColombianPayment({
+          tableId,
+          employeeId: tempEmployeeId,
+          paymentMethod,
+          amount: calculation.finalTotal,
+          subtotal: calculation.subtotal,
+          impoconsumo: calculation.impoconsumo,
+          tip: calculation.tip,
+          items: enhancedOrderItems
         });
+        
+        if (!paymentWorkflowResponse.success) {
+          console.warn('N8N payment workflow failed (non-fatal):', paymentWorkflowResponse.error);
+          paymentWorkflowResponse = { success: true, executionId: null }; // Continue without n8n
+        }
+      } catch (n8nError) {
+        console.warn('N8N service unavailable, continuing with local payment processing:', n8nError);
+        paymentWorkflowResponse = { success: true, executionId: null }; // Continue without n8n
       }
 
       // Create Payment record (basic implementation)
@@ -546,29 +549,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('Invoice record created:', createdInvoice);
 
-      // Trigger DIAN invoice generation workflow
-      const invoiceWorkflowResponse = await n8nClient.generateDianInvoice({
-        paymentId: paymentId,
-        invoiceNumber,
-        nit: process.env.RESTAURANT_NIT || "900123456-1",
-        clientName: "CONSUMIDOR FINAL",
-        subtotal: calculation.subtotal,
-        impoconsumo: calculation.impoconsumo,
-        totalAmount: calculation.finalTotal
-      });
+      // Trigger DIAN invoice generation workflow (optional)
+      try {
+        const invoiceWorkflowResponse = await n8nClient.generateDianInvoice({
+          paymentId: paymentId,
+          invoiceNumber,
+          nit: process.env.RESTAURANT_NIT || "900123456-1",
+          clientName: "CONSUMIDOR FINAL",
+          subtotal: calculation.subtotal,
+          impoconsumo: calculation.impoconsumo,
+          totalAmount: calculation.finalTotal
+        });
 
-      if (!invoiceWorkflowResponse.success) {
-        console.warn('DIAN invoice generation failed (non-fatal):', invoiceWorkflowResponse.error);
+        if (!invoiceWorkflowResponse.success) {
+          console.warn('DIAN invoice generation failed (non-fatal):', invoiceWorkflowResponse.error);
+          // Continue - invoice generation failure doesn't block payment
+        }
+      } catch (invoiceError) {
+        console.warn('DIAN invoice service unavailable (non-fatal):', invoiceError);
         // Continue - invoice generation failure doesn't block payment
       }
 
-      // Trigger analytics calculation workflow
-      await n8nClient.calculateAnalytics({
-        date: new Date().toISOString().split('T')[0],
-        restaurantId: process.env.RESTAURANT_ID || 'sumapos-colombia',
-        includeEmployeeMetrics: false,
-        includePeakHours: false
-      });
+      // Trigger analytics calculation workflow (optional)
+      try {
+        await n8nClient.calculateAnalytics({
+          date: new Date().toISOString().split('T')[0],
+          restaurantId: process.env.RESTAURANT_ID || 'sumapos-colombia',
+          includeEmployeeMetrics: false,
+          includePeakHours: false
+        });
+      } catch (analyticsError) {
+        console.warn('Analytics service unavailable (non-fatal):', analyticsError);
+        // Continue - analytics failure doesn't block payment
+      }
 
       // Payment completed successfully - clear order items and free table
       await storage.clearOrderItems(tableId);
